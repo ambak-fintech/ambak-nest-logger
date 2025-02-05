@@ -1,0 +1,49 @@
+# Node modules
+node_modules/
+*/node_modules/
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependency directories
+jspm_packages/
+
+# Build output
+dist/
+build/
+
+# TypeScript compiled files
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE/Editor specific files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Linked modules (since you're using npm link)
+*.tgz
+
+# Misc
+.pnp/
+.pnp.js

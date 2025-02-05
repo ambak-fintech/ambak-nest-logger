@@ -1,0 +1,31 @@
+{
+    "compilerOptions": {
+      "module": "CommonJS",                // Compatible with Node.js
+      "declaration": true,                 // Generate .d.ts files (good for libraries)
+      "removeComments": true,              // Clean output
+      "emitDecoratorMetadata": true,       // Required by NestJS for decorators
+      "experimentalDecorators": true,      // Enable decorator support
+      "allowSyntheticDefaultImports": true,
+      "target": "ES2017",                  // Modern JS features
+      "sourceMap": true,                   // Enable source maps for debugging
+      "outDir": "./dist",                  // Output directory for compiled files
+      "baseUrl": "./",                     // Base directory for non-relative imports
+      "incremental": true,                 // Speeds up builds by reusing cache
+      "strict": true,                      // Enable all strict type-checking options
+      "esModuleInterop": true,             // Ensure compatibility with CommonJS modules
+      "skipLibCheck": true,                // Skip type checking for libraries (faster)
+      "moduleResolution": "node",          // Use Node.js module resolution strategy
+      "types": ["node"],                   // Type definitions for Node.js
+      "paths": {
+        "@ambak/nest-logger": ["../dist"]  // Resolve your custom package from the dist folder
+      }
+    },
+    "include": [
+      "src/**/*.ts"                        // Include all TypeScript files in src
+    ],
+    "exclude": [
+      "node_modules",                      // Exclude node_modules
+      "dist"                               // Exclude compiled output
+    ]
+  }
+  
