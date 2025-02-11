@@ -56,6 +56,12 @@ export const DEFAULT_SENSITIVE_FIELDS = new Set([
   'social'
 ]);
 
+export function getLogLevel(status: number): 'error' | 'warn' | 'info' {
+  if (status >= 500) return 'error';
+  if (status >= 400) return 'warn';
+  return 'info';
+}
+
 export const DEFAULT_SENSITIVE_HEADERS = [
   'authorization',
   'cookie',

@@ -45,7 +45,11 @@ export class BaseLoggerService {
       timestamp: pino.stdTimeFunctions.isoTime,
       formatters,
       serializers,
-      transport
+      transport,
+      base: {
+        projectId: this.config.PROJECT_ID,
+        loggerName: this.config.LOGGER_NAME || this.config.SERVICE_NAME
+      }
     });
   }
 
@@ -57,7 +61,8 @@ export class BaseLoggerService {
       requestId: context.requestId,
       traceId: context.traceId,
       spanId: context.spanId,
-      service: this.config.SERVICE_NAME
+      service: this.config.SERVICE_NAME,
+      projectId: this.config.PROJECT_ID
     };
   }
 

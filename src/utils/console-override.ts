@@ -172,16 +172,3 @@ export class ScopedConsoleOverride {
         };
     }
 }
-
-// Example usage of decorator:
-/*
-class MyService {
-    constructor(private readonly logger: BaseLoggerService) {}
-
-    @ScopedConsoleOverride.withConsoleOverride(this.logger, { preserveOriginal: true })
-    async someMethod() {
-        console.log('This will be logged through the logger');
-        // Method logic here
-    }
-}
-*/

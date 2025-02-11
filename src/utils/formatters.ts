@@ -41,7 +41,7 @@ export const getResourceLabels = (
 ): ResourceLabels => {
     return {
         project_id: projectId || '',
-        logger_name: loggerName,
+        logger_name: loggerName || 'nest-logger',
     };
 };
 
@@ -86,18 +86,20 @@ export const formatJsonLog = (
     if (!log) return log;
     
     const {
-        PROJECT_ID: projectId,
+        PROJECT_ID: configProjectId,
         includeResource = true,
         includeTrace = true,
     } = options;
-    
+
+    const effectiveProjectId = log.PROJECT_ID || configProjectId;
+    const effectiveLoggerName = log.logName || log.service;
     const formatted: CloudLogEntry = {
         severity: SEVERITY_LEVEL[log.level || 'info'] || 'DEFAULT',
     };
     
     if (includeTrace && log.traceId) {
-        formatted['logging.googleapis.com/trace'] = projectId 
-            ? `projects/${projectId}/traces/${log.traceId}`
+        formatted['logging.googleapis.com/trace'] = effectiveProjectId 
+            ? `projects/${effectiveProjectId}/traces/${log.traceId}`
             : log.traceId;
         
         if (log.spanId) {
@@ -109,7 +111,7 @@ export const formatJsonLog = (
         formatted['logging.googleapis.com/labels'] = {
             requestId: log.requestId,
             service: log.service,
-            logName: getCloudLogName(projectId, log.loggerName),
+            logName: getCloudLogName(effectiveProjectId, effectiveLoggerName),
         };
     }
     

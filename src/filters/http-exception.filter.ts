@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { BaseLoggerService } from '../logger/base-logger.service';
-import { LOGGER_CONSTANTS } from '../config/constants';
+import { LOGGER_CONSTANTS, getLogLevel } from '../config/constants';
 import { LoggerConfig } from '../interfaces';
 import { RequestContext } from '../context';
 import { serializers } from '../utils/serializers';
@@ -37,6 +37,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
         private readonly asyncStorage: AsyncLocalStorage<RequestContext>
     ) {}
 
+    private getLogLevel(status: number): 'error' | 'warn' | 'info' {
+        if (status >= 500) return 'error';
+        if (status >= 400) return 'warn';
+        return 'info';
+    }
+
     catch(error: Error, host: ArgumentsHost): void {
         const ctx = host.switchToHttp();
         const response = ctx.getResponse<Response>();
@@ -46,69 +52,43 @@ export class HttpExceptionFilter implements ExceptionFilter {
         const status = this.getHttpStatus(error);
         const errorResponse = this.createErrorResponse(error, status, request, context);
         
-        // Log the error
-        this.logError(error, request, errorResponse, context);
+        // Set the status before logging
+        response.status(status);
+        
+        // Log using appropriate level based on status code
+        const logLevel = getLogLevel(status);
+        
+        // Only log error response here, request was already logged by interceptor
+        this.logErrorResponse(error, request, errorResponse, context, status, logLevel);
 
-        // Send response to client
-        response
-            .status(status)
-            .json(errorResponse);
+        response.json(errorResponse);
     }
 
-    private getHttpStatus(error: Error): number {
-        return error instanceof HttpException
-            ? error.getStatus()
-            : HttpStatus.INTERNAL_SERVER_ERROR;
-    }
-
-    private createErrorResponse(
-        error: Error,
-        status: number,
-        request: Request,
-        context: RequestContext | null
-    ): ErrorResponse {
-        const message = error instanceof HttpException
-            ? error.message
-            : 'Internal server error';
-
-        const response: ErrorResponse = {
-            statusCode: status,
-            message,
-            error: error.name,
-            timestamp: new Date().toISOString(),
-            path: request.url,
-        };
-
-        if (context) {
-            response.requestId = context.requestId;
-            response.traceId = context.traceId;
-        }
-
-        return response;
-    }
-
-    private logError(
+    private logErrorResponse(
         error: Error,
         request: Request,
         errorResponse: ErrorResponse,
-        context: RequestContext | null
+        context: RequestContext | null,
+        status: number,
+        logLevel: 'error' | 'warn' | 'info'
     ): void {
         const baseLogData = {
             requestId: context?.requestId,
             traceId: context?.traceId,
             spanId: context?.spanId,
-            service: this.config.SERVICE_NAME
+            service: this.config.SERVICE_NAME,
+            projectId: this.config.PROJECT_ID
         };
 
-        const errorLog = formatJsonLog({
+        const logData = {
             ...baseLogData,
-            type: 'error',
+            type: 'response',
             error: serializers.err(error),
             response: errorResponse,
             httpRequest: {
                 requestMethod: request.method,
                 requestUrl: request.originalUrl,
-                status: errorResponse.statusCode,
+                status: status,
                 userAgent: request.headers['user-agent'],
                 remoteIp: request.ip,
                 referer: request.headers.referer,
@@ -117,12 +97,162 @@ export class HttpExceptionFilter implements ExceptionFilter {
                     nanos: (parseInt(context.getElapsedMs()) % 1000) * 1e6
                 } : undefined
             }
-        });
+        };
 
-        this.logger.error(errorLog);
+        const formattedLog = formatJsonLog(logData);
+
+        switch(logLevel) {
+            case 'warn':
+                this.logger.warn(formattedLog);
+                break;
+            case 'error':
+                this.logger.error(formattedLog);
+                break;
+            default:
+                this.logger.info(formattedLog);
+        }
+    }
+
+    private logResponse(
+        request: Request,
+        errorResponse: ErrorResponse,
+        context: RequestContext | null,
+        status: number
+    ): void {
+        const baseLogData = {
+            requestId: context?.requestId,
+            traceId: context?.traceId,
+            spanId: context?.spanId,
+            service: this.config.SERVICE_NAME,
+            projectId: this.config.PROJECT_ID
+        };
+
+        const logData = {
+            ...baseLogData,
+            type: 'response',
+            response: errorResponse,
+            httpRequest: {
+                requestMethod: request.method,
+                requestUrl: request.originalUrl,
+                status: status,
+                userAgent: request.headers['user-agent'],
+                remoteIp: request.ip,
+                referer: request.headers.referer,
+                latency: context ? {
+                    seconds: parseInt(context.getElapsedMs()) / 1000,
+                    nanos: (parseInt(context.getElapsedMs()) % 1000) * 1e6
+                } : undefined
+            }
+        };
+
+        const formattedLog = formatJsonLog(logData);
+        this.logger.warn(formattedLog);
+    }
+
+    private getHttpStatus(error: Error): number {
+        if (error instanceof HttpException) {
+            const status = error.getStatus();
+            return status;
+        }
+        
+        if (error.name === 'NotFoundException') {
+            return HttpStatus.NOT_FOUND;
+        }
+    
+        return HttpStatus.INTERNAL_SERVER_ERROR;
+    }
+
+    private createErrorResponse(
+        error: Error,
+        status: number,
+        request: Request,
+        context: RequestContext | null
+    ): ErrorResponse {
+        let message: string;
+        let errorType: string;
+    
+        if (error instanceof HttpException) {
+            message = error.message;
+            errorType = error.name;
+        } else {
+            // For non-HttpException errors, check if they have a response property
+            const errorResponse = (error as any).response;
+            if (errorResponse) {
+                message = errorResponse.message;
+                errorType = errorResponse.error;
+            } else {
+                message = error.message;
+                errorType = error.name;
+            }
+        }
+    
+        // For 404s, always use the error message instead of "Internal server error"
+        if (status === HttpStatus.NOT_FOUND) {
+            message = error.message;
+        }
+    
+        const response: ErrorResponse = {
+            statusCode: status,
+            message: message || 'Internal server error',
+            error: errorType || 'Internal Server Error',
+            timestamp: new Date().toISOString(),
+            path: request.url,
+        };
+    
+        if (context) {
+            response.requestId = context.requestId;
+            response.traceId = context.traceId;
+        }
+    
+        return response;
+    }
+
+    private logError(
+        error: Error,
+        request: Request,
+        errorResponse: ErrorResponse,
+        context: RequestContext | null,
+        status: number,
+        logLevel: 'error' | 'warn' | 'info'
+    ): void {
+        const baseLogData = {
+            requestId: context?.requestId,
+            traceId: context?.traceId,
+            spanId: context?.spanId,
+            service: this.config.SERVICE_NAME,
+            projectId: this.config.PROJECT_ID
+        };
+
+        const logData = {
+            ...baseLogData,
+            type: 'error',
+            error: serializers.err(error),
+            response: errorResponse,
+            httpRequest: {
+                requestMethod: request.method,
+                requestUrl: request.originalUrl,
+                status: status,
+                userAgent: request.headers['user-agent'],
+                remoteIp: request.ip,
+                referer: request.headers.referer,
+                latency: context ? {
+                    seconds: parseInt(context.getElapsedMs()) / 1000,
+                    nanos: (parseInt(context.getElapsedMs()) % 1000) * 1e6
+                } : undefined
+            }
+        };
+
+        const formattedLog = formatJsonLog(logData);
+
+        switch(logLevel) {
+            case 'warn':
+                this.logger.warn(formattedLog);
+                break;
+            case 'error':
+                this.logger.error(formattedLog);
+                break;
+            default:
+                this.logger.info(formattedLog);
+        }
     }
 }
-
-// src/filters/index.ts
-
-export * from './http-exception.filter';

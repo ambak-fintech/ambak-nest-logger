@@ -1,3 +1,4 @@
+// src/context/trace-context.ts
 import { randomBytes } from 'crypto';
 
 export class TraceContext {
