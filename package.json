@@ -1,6 +1,6 @@
 {
     "name": "@ambak/nest-logger",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Structured logging for NestJS applications",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -36,9 +36,11 @@
     "peerDependencies": {
       "@nestjs/common": "^10.0.0",
       "@nestjs/core": "^10.0.0",
-      "@nestjs/graphql": "^12.0.0",
-      "reflect-metadata": "^0.1.13",
+      "reflect-metadata": "^0.1.13 || ^0.2.0",
       "rxjs": "^7.8.1"
+    },
+    "optionalDependencies": {
+      "@nestjs/graphql": "^12.0.0"
     },
     "dependencies": {
       "pino": "^8.14.1",
