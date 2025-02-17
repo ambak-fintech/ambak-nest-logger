@@ -1,6 +1,6 @@
 {
     "name": "@ambak/nest-logger",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Structured logging for NestJS applications",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -10,6 +10,8 @@
     ],
     "scripts": {
       "build": "rimraf dist && tsc",
+      "build:watch": "rimraf dist && tsc --watch",
+      "dev": "npm run build:watch",
       "prepare": "npm run build",
       "test": "jest",
       "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",

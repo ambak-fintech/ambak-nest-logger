@@ -91,7 +91,7 @@ export const formatJsonLog = (
         includeTrace = true,
     } = options;
 
-    const effectiveProjectId = log.PROJECT_ID || configProjectId;
+    const effectiveProjectId = log.PROJECT_ID || log.projectId || configProjectId;
     const effectiveLoggerName = log.logName || log.service;
     const formatted: CloudLogEntry = {
         severity: SEVERITY_LEVEL[log.level || 'info'] || 'DEFAULT',

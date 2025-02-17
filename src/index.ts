@@ -2,6 +2,7 @@
 
 export * from './logger.module';
 export * from './logger/base-logger.service';
+export * from './services/console-override.service';
 export * from './decorators';
 export * from './filters';
 export * from './interceptors';

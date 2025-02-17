@@ -1,6 +1,9 @@
 // src/utils/console-override.ts
 
 import { BaseLoggerService } from '../logger/base-logger.service';
+import { formatJsonLog } from './formatters';
+import { RequestContext } from '../context/request-context';
+import { AsyncLocalStorage } from 'async_hooks';
 
 interface OriginalConsole {
     log: typeof console.log;
@@ -10,7 +13,12 @@ interface OriginalConsole {
     debug: typeof console.debug;
 }
 
-// Store original console methods
+interface ConsoleOverrideConfig {
+    preserveOriginal?: boolean;
+    projectId?: string;
+    service?: string;
+}
+
 const originalConsole: OriginalConsole = {
     log: console.log,
     warn: console.warn,
@@ -19,83 +27,148 @@ const originalConsole: OriginalConsole = {
     debug: console.debug
 };
 
-/**
- * Format multiple arguments into a single message
- * Handles cases like: console.log('User:', user, 'Action:', action)
- */
-const formatArgs = (...args: any[]): string => {
-    return args.map(arg => {
-        if (arg === undefined) return 'undefined';
-        if (arg === null) return 'null';
-        
-        if (typeof arg === 'object') {
-            try {
-                // Handle Error objects specially
-                if (arg instanceof Error) {
-                    return `${arg.name}: ${arg.message}\n${arg.stack || ''}`;
-                }
-                return JSON.stringify(arg, null, 2);
-            } catch (e) {
-                return '[Complex Object]';
+const safeStringify = (obj: any, seen = new WeakSet()): string => {
+    // Handle non-object types
+    if (obj === null || typeof obj !== 'object') {
+        return String(obj);
+    }
+
+    // Handle Date objects
+    if (obj instanceof Date) {
+        return obj.toISOString();
+    }
+
+    // Handle Error objects
+    if (obj instanceof Error) {
+        const { name, message, stack, ...rest } = obj;
+        return JSON.stringify({
+            error: {
+                name,
+                message,
+                stack,
+                ...rest
             }
-        }
-        return String(arg);
-    }).join(' ');
+        });
+    }
+
+    // Check for circular references
+    if (seen.has(obj)) {
+        return '[Circular Reference]';
+    }
+
+    // Add object to WeakSet of seen objects
+    seen.add(obj);
+
+    // Handle arrays
+    if (Array.isArray(obj)) {
+        const arr = obj.map(item => {
+            try {
+                return safeStringify(item, seen);
+            } catch (e) {
+                return '[Complex Value]';
+            }
+        });
+        return `[${arr.join(', ')}]`;
+    }
+
+    // Handle objects
+    try {
+        const entries = Object.entries(obj)
+            .filter(([_, value]) => value !== undefined) // Filter out undefined values
+            .map(([key, value]) => {
+                try {
+                    // Skip internal Node.js properties that often cause circular refs
+                    if (key === 'socket' || key === '_httpMessage' || key === 'connection') {
+                        return `"${key}": "[Socket]"`;
+                    }
+                    return `"${key}": ${safeStringify(value, seen)}`;
+                } catch (e) {
+                    return `"${key}": "[Complex Value]"`;
+                }
+            });
+        return `{${entries.join(', ')}}`;
+    } catch (e) {
+        return '[Complex Object]';
+    }
 };
 
-/**
- * Create console override handlers
- */
-const createConsoleHandlers = (logger: BaseLoggerService) => ({
+const formatArgs = (
+    asyncLocalStorage: AsyncLocalStorage<RequestContext>,
+    config: ConsoleOverrideConfig,
+    ...args: any[]
+): any => {
+    const message = args.map(arg => {
+        try {
+            return safeStringify(arg);
+        } catch (e) {
+            return '[Unserializable Object]';
+        }
+    }).join(' ');
+
+    const context = asyncLocalStorage.getStore();
+
+    const logData = {
+        message,
+        requestId: context?.requestId,
+        traceId: context?.traceId,
+        spanId: context?.spanId,
+        timestamp: new Date().toISOString(),
+        log_override: true,
+        projectId: config.projectId,
+        service: config.service
+    };
+
+    return formatJsonLog(logData);
+};
+
+const createConsoleHandlers = (
+    logger: BaseLoggerService,
+    asyncLocalStorage: AsyncLocalStorage<RequestContext>,
+    config: ConsoleOverrideConfig = {}
+) => ({
     log: (...args: any[]) => {
-        logger.info(formatArgs(...args));
+        const formattedLog = formatArgs(asyncLocalStorage, config, ...args);
+        logger.info(formattedLog);
     },
     
     info: (...args: any[]) => {
-        logger.info(formatArgs(...args));
+        const formattedLog = formatArgs(asyncLocalStorage, config, ...args);
+        logger.info(formattedLog);
     },
     
     warn: (...args: any[]) => {
-        logger.warn(formatArgs(...args));
+        const formattedLog = formatArgs(asyncLocalStorage, config, ...args);
+        logger.warn(formattedLog);
     },
     
     error: (...args: any[]) => {
-        // Special handling for Error objects
+        const formattedLog = formatArgs(asyncLocalStorage, config, ...args);
         if (args.length === 1 && args[0] instanceof Error) {
-            const { message, name, stack, ...rest } = args[0] as Error & Record<string, any>;
-            logger.error({
-                message,
-                name,
-                stack,
-                ...rest
+            const err = args[0];
+            Object.assign(formattedLog, {
+                error: {
+                    name: err.name,
+                    message: err.message,
+                    stack: err.stack
+                }
             });
-            return;
         }
-        logger.error(formatArgs(...args));
+        logger.error(formattedLog);
     },
     
     debug: (...args: any[]) => {
-        logger.debug(formatArgs(...args));
+        const formattedLog = formatArgs(asyncLocalStorage, config, ...args);
+        logger.debug(formattedLog);
     }
 });
 
-/**
- * Console override configuration
- */
-interface ConsoleOverrideConfig {
-    preserveOriginal?: boolean; // If true, also calls original console methods
-}
-
-/**
- * Override console methods with logger
- */
 export const enableConsoleOverride = (
     logger: BaseLoggerService,
+    asyncLocalStorage: AsyncLocalStorage<RequestContext>,
     config: ConsoleOverrideConfig = {}
 ): void => {
-    const handlers = createConsoleHandlers(logger);
+    const handlers = createConsoleHandlers(logger, asyncLocalStorage, config);
 
-    // Override each console method
     Object.entries(handlers).forEach(([method, handler]) => {
         (console as any)[method] = config.preserveOriginal
             ? (...args: any[]) => {
@@ -106,69 +179,8 @@ export const enableConsoleOverride = (
     });
 };
 
-/**
- * Restore original console methods
- */
 export const disableConsoleOverride = (): void => {
     Object.entries(originalConsole).forEach(([method, fn]) => {
         (console as any)[method] = fn;
     });
 };
-
-/**
- * Create a scoped console override
- * Useful for temporarily overriding console within a specific scope
- */
-export class ScopedConsoleOverride {
-    private isEnabled = false;
-
-    constructor(
-        private readonly logger: BaseLoggerService,
-        private readonly config: ConsoleOverrideConfig = {}
-    ) {}
-
-    enable(): void {
-        if (!this.isEnabled) {
-            enableConsoleOverride(this.logger, this.config);
-            this.isEnabled = true;
-        }
-    }
-
-    disable(): void {
-        if (this.isEnabled) {
-            disableConsoleOverride();
-            this.isEnabled = false;
-        }
-    }
-
-    // Helper method to use with try/finally
-    execute<T>(fn: () => T): T {
-        this.enable();
-        try {
-            return fn();
-        } finally {
-            this.disable();
-        }
-    }
-
-    // Helper method to use as decorator
-    static withConsoleOverride(
-        logger: BaseLoggerService,
-        config: ConsoleOverrideConfig = {}
-    ) {
-        return function (
-            target: any,
-            propertyKey: string,
-            descriptor: PropertyDescriptor
-        ) {
-            const originalMethod = descriptor.value;
-            const override = new ScopedConsoleOverride(logger, config);
-
-            descriptor.value = function (...args: any[]) {
-                return override.execute(() => originalMethod.apply(this, args));
-            };
-
-            return descriptor;
-        };
-    }
-}
