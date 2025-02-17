@@ -8,6 +8,7 @@ import { LoggingInterceptor } from './interceptors/logging.interceptor';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { AsyncLocalStorage } from 'async_hooks';
 import { APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
+import { ConsoleOverrideService } from './services/console-override.service';
 
 @Global()
 @Module({})
@@ -27,6 +28,7 @@ export class LoggerModule {
         useClass: BaseLoggerService
       },
       BaseLoggerService, // Explicitly add BaseLoggerService
+      ConsoleOverrideService,
       {
         provide: APP_INTERCEPTOR,
         useClass: LoggingInterceptor

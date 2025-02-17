@@ -1,5 +1,4 @@
 // src/filters/http-exception.filter.ts
-
 import {
     ExceptionFilter,
     Catch,
@@ -7,22 +6,39 @@ import {
     HttpException,
     HttpStatus,
     Inject,
+    BadRequestException,
+    ExecutionContext
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { BaseLoggerService } from '../logger/base-logger.service';
-import { LOGGER_CONSTANTS, getLogLevel } from '../config/constants';
+import { LOGGER_CONSTANTS } from '../config/constants';
 import { LoggerConfig } from '../interfaces';
 import { RequestContext } from '../context';
 import { serializers } from '../utils/serializers';
 import { formatJsonLog } from '../utils/formatters';
 import { AsyncLocalStorage } from 'async_hooks';
 
+enum ContextType {
+    HTTP = 'http',
+    GRAPHQL = 'graphql',
+    RPC = 'rpc',
+    WS = 'ws'
+}
+
+let GqlExecutionContext: any;
+try {
+    const { GqlExecutionContext: GqlContext } = require('@nestjs/graphql');
+    GqlExecutionContext = GqlContext;
+} catch {
+    // Silent catch - GraphQL support is optional
+}
+
 interface ErrorResponse {
     statusCode: number;
-    message: string;
-    error: string;
-    timestamp: string;
-    path: string;
+    message?: string;
+    error?: any;
+    timestamp?: string;
+    path?: string;
     requestId?: string;
     traceId?: string;
 }
@@ -37,128 +53,106 @@ export class HttpExceptionFilter implements ExceptionFilter {
         private readonly asyncStorage: AsyncLocalStorage<RequestContext>
     ) {}
 
+    catch(error: Error, host: ArgumentsHost): void {
+        const contextType = host.getType() as ContextType;
+        let request: Request;
+        let response: Response;
+
+        if (contextType === ContextType.HTTP) {
+            const ctx = host.switchToHttp();
+            request = ctx.getRequest<Request>();
+            response = ctx.getResponse<Response>();
+        } else if (contextType === ContextType.GRAPHQL && GqlExecutionContext) {
+            const gqlContext = GqlExecutionContext.create(host as ExecutionContext);
+            const ctx = gqlContext.getContext();
+            request = ctx.req;
+            response = {
+                status: (statusCode: number) => ({
+                    json: (data: any) => {
+                        ctx.errorResponse = { ...data, statusCode };
+                        return response;
+                    }
+                }),
+                setHeader: () => response
+            } as any;
+        } else {
+            this.logger.error(`Unsupported context type: ${contextType}`);
+            return;
+        }
+
+        if (!request || !response) {
+            this.logger.error('Unable to get request or response objects');
+            return;
+        }
+
+        const existingContext = this.asyncStorage.getStore();
+        if (!existingContext) {
+            const newContext = RequestContext.create(request);
+            this.asyncStorage.run(newContext, () => {
+                this.handleError(error, request, response, newContext, contextType);
+            });
+            return;
+        }
+
+        this.handleError(error, request, response, existingContext, contextType);
+    }
+
+    private handleError(
+        error: Error,
+        request: Request,
+        response: Response,
+        context: RequestContext,
+        contextType: ContextType
+    ): void {
+        const status = this.getHttpStatus(error);
+        const errorResponse = this.createErrorResponse(error, status, request, context);
+        
+        if (contextType === ContextType.HTTP) {
+            const headers = context.addTraceHeaders();
+            Object.entries(headers).forEach(([key, value]) => {
+                if (value) {
+                    response.setHeader(key, value);
+                }
+            });
+        }
+
+        const logLevel = this.getLogLevel(status);
+        this.logErrorResponse(error, request, errorResponse, context, status, logLevel, contextType);
+
+        if (contextType === ContextType.GRAPHQL) {
+            throw this.formatGraphQLError(errorResponse);
+        } else {
+            const httpError = error as HttpException;
+            response.status(status).json(httpError.getResponse() || errorResponse);
+        }
+    }
+
+    private formatGraphQLError(errorResponse: ErrorResponse): Error {
+        const graphQLError = new Error(errorResponse.message || 'GraphQL Error');
+        Object.assign(graphQLError, {
+            extensions: {
+                ...errorResponse,
+                code: typeof errorResponse.error === 'string' ? errorResponse.error : 'BAD_REQUEST'
+            }
+        });
+        return graphQLError;
+    }
+
     private getLogLevel(status: number): 'error' | 'warn' | 'info' {
         if (status >= 500) return 'error';
         if (status >= 400) return 'warn';
         return 'info';
     }
 
-    catch(error: Error, host: ArgumentsHost): void {
-        const ctx = host.switchToHttp();
-        const response = ctx.getResponse<Response>();
-        const request = ctx.getRequest<Request>();
-        const context = this.asyncStorage.getStore() || null;
-
-        const status = this.getHttpStatus(error);
-        const errorResponse = this.createErrorResponse(error, status, request, context);
-        
-        // Set the status before logging
-        response.status(status);
-        
-        // Log using appropriate level based on status code
-        const logLevel = getLogLevel(status);
-        
-        // Only log error response here, request was already logged by interceptor
-        this.logErrorResponse(error, request, errorResponse, context, status, logLevel);
-
-        response.json(errorResponse);
-    }
-
-    private logErrorResponse(
-        error: Error,
-        request: Request,
-        errorResponse: ErrorResponse,
-        context: RequestContext | null,
-        status: number,
-        logLevel: 'error' | 'warn' | 'info'
-    ): void {
-        const baseLogData = {
-            requestId: context?.requestId,
-            traceId: context?.traceId,
-            spanId: context?.spanId,
-            service: this.config.SERVICE_NAME,
-            projectId: this.config.PROJECT_ID
-        };
-
-        const logData = {
-            ...baseLogData,
-            type: 'response',
-            error: serializers.err(error),
-            response: errorResponse,
-            httpRequest: {
-                requestMethod: request.method,
-                requestUrl: request.originalUrl,
-                status: status,
-                userAgent: request.headers['user-agent'],
-                remoteIp: request.ip,
-                referer: request.headers.referer,
-                latency: context ? {
-                    seconds: parseInt(context.getElapsedMs()) / 1000,
-                    nanos: (parseInt(context.getElapsedMs()) % 1000) * 1e6
-                } : undefined
-            }
-        };
-
-        const formattedLog = formatJsonLog(logData);
-
-        switch(logLevel) {
-            case 'warn':
-                this.logger.warn(formattedLog);
-                break;
-            case 'error':
-                this.logger.error(formattedLog);
-                break;
-            default:
-                this.logger.info(formattedLog);
-        }
-    }
-
-    private logResponse(
-        request: Request,
-        errorResponse: ErrorResponse,
-        context: RequestContext | null,
-        status: number
-    ): void {
-        const baseLogData = {
-            requestId: context?.requestId,
-            traceId: context?.traceId,
-            spanId: context?.spanId,
-            service: this.config.SERVICE_NAME,
-            projectId: this.config.PROJECT_ID
-        };
-
-        const logData = {
-            ...baseLogData,
-            type: 'response',
-            response: errorResponse,
-            httpRequest: {
-                requestMethod: request.method,
-                requestUrl: request.originalUrl,
-                status: status,
-                userAgent: request.headers['user-agent'],
-                remoteIp: request.ip,
-                referer: request.headers.referer,
-                latency: context ? {
-                    seconds: parseInt(context.getElapsedMs()) / 1000,
-                    nanos: (parseInt(context.getElapsedMs()) % 1000) * 1e6
-                } : undefined
-            }
-        };
-
-        const formattedLog = formatJsonLog(logData);
-        this.logger.warn(formattedLog);
-    }
-
     private getHttpStatus(error: Error): number {
         if (error instanceof HttpException) {
-            const status = error.getStatus();
-            return status;
+            return error.getStatus();
         }
-        
-        if (error.name === 'NotFoundException') {
-            return HttpStatus.NOT_FOUND;
+
+        if (error.name === 'ValidationError' || error.name === 'UserInputError' || error.name === 'BadRequestException') {
+            return HttpStatus.BAD_REQUEST;
         }
-    
+
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 
@@ -166,79 +160,104 @@ export class HttpExceptionFilter implements ExceptionFilter {
         error: Error,
         status: number,
         request: Request,
-        context: RequestContext | null
+        context: RequestContext
     ): ErrorResponse {
-        let message: string;
-        let errorType: string;
-    
-        if (error instanceof HttpException) {
-            message = error.message;
-            errorType = error.name;
-        } else {
-            // For non-HttpException errors, check if they have a response property
-            const errorResponse = (error as any).response;
-            if (errorResponse) {
-                message = errorResponse.message;
-                errorType = errorResponse.error;
-            } else {
-                message = error.message;
-                errorType = error.name;
+        // For BadRequestException, preserve the original error structure
+        if (error instanceof BadRequestException) {
+            const errorResponse = error.getResponse() as any;
+            
+            // If errorResponse is an object and has the 'error' property we want to preserve
+            if (typeof errorResponse === 'object' && errorResponse.error) {
+                return {
+                    statusCode: status,
+                    error: errorResponse.error
+                };
+            }
+
+            // If errorResponse itself is the error object we want to preserve
+            if (typeof errorResponse === 'object' && !errorResponse.message && !errorResponse.error) {
+                return {
+                    statusCode: status,
+                    error: errorResponse
+                };
+            }
+
+            // If it's a validation error array
+            if (Array.isArray(errorResponse.message)) {
+                return {
+                    statusCode: status,
+                    error: {
+                        messages: errorResponse.message
+                    }
+                };
             }
         }
-    
-        // For 404s, always use the error message instead of "Internal server error"
-        if (status === HttpStatus.NOT_FOUND) {
-            message = error.message;
+
+        // For other HttpExceptions
+        if (error instanceof HttpException) {
+            const errorResponse = error.getResponse() as any;
+            
+            // If errorResponse is an object, preserve its structure
+            if (typeof errorResponse === 'object') {
+                return {
+                    statusCode: status,
+                    ...errorResponse
+                };
+            }
+
+            // If errorResponse is a string or other primitive
+            return {
+                statusCode: status,
+                message: errorResponse
+            };
         }
-    
-        const response: ErrorResponse = {
+
+        // Default error response for non-HTTP exceptions
+        return {
             statusCode: status,
-            message: message || 'Internal server error',
-            error: errorType || 'Internal Server Error',
+            message: error.message,
+            error: error.name,
             timestamp: new Date().toISOString(),
             path: request.url,
+            requestId: context.requestId,
+            traceId: context.traceId
         };
-    
-        if (context) {
-            response.requestId = context.requestId;
-            response.traceId = context.traceId;
-        }
-    
-        return response;
     }
 
-    private logError(
+    private logErrorResponse(
         error: Error,
         request: Request,
         errorResponse: ErrorResponse,
-        context: RequestContext | null,
+        context: RequestContext,
         status: number,
-        logLevel: 'error' | 'warn' | 'info'
+        logLevel: 'error' | 'warn' | 'info',
+        contextType: ContextType
     ): void {
-        const baseLogData = {
-            requestId: context?.requestId,
-            traceId: context?.traceId,
-            spanId: context?.spanId,
-            service: this.config.SERVICE_NAME,
-            projectId: this.config.PROJECT_ID
-        };
-
         const logData = {
-            ...baseLogData,
-            type: 'error',
+            requestId: context.requestId,
+            traceId: context.traceId,
+            spanId: context.spanId,
+            service: this.config.SERVICE_NAME,
+            projectId: this.config.PROJECT_ID,
+            contextType,
+            type: 'response',
             error: serializers.err(error),
             response: errorResponse,
             httpRequest: {
                 requestMethod: request.method,
                 requestUrl: request.originalUrl,
-                status: status,
+                status,
                 userAgent: request.headers['user-agent'],
                 remoteIp: request.ip,
                 referer: request.headers.referer,
-                latency: context ? {
+                requestBody: request.body,
+                protocol: request.protocol,
+                requestSize: request.headers['content-length'],
+                latency: {
                     seconds: parseInt(context.getElapsedMs()) / 1000,
                     nanos: (parseInt(context.getElapsedMs()) % 1000) * 1e6
-                } : undefined
+                },
+                headers: request.headers
             }
         };
 
