@@ -246,6 +246,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         const logData = {
             requestId: context.requestId,
             traceId: context.traceId,
+            logSource: 'exception',
             spanId: context.spanId,
             service: this.config.SERVICE_NAME,
             projectId: this.config.PROJECT_ID,

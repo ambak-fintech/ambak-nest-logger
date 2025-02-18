@@ -109,6 +109,7 @@ const formatArgs = (
 
     const logData = {
         message,
+        logSource: 'console',
         requestId: context?.requestId,
         traceId: context?.traceId,
         spanId: context?.spanId,
