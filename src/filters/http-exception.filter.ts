@@ -105,7 +105,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         contextType: ContextType
     ): void {
         const status = this.getHttpStatus(error);
-        const errorResponse = this.createErrorResponse(error, status, request, context);
+        let errorResponse = this.createErrorResponse(error, status, request, context);
         
         if (contextType === ContextType.HTTP) {
             const headers = context.addTraceHeaders();
@@ -123,7 +123,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
             throw this.formatGraphQLError(errorResponse);
         } else {
             const httpError = error as HttpException;
-            response.status(status).json(httpError.getResponse() || errorResponse);
+            try{
+                response.status(status).json(httpError.getResponse())
+            } catch(err){
+                errorResponse = {
+                    ...errorResponse,
+                    message: !process.env.NODE_ENV || process.env.NODE_ENV !== 'production'
+                        ? error.message
+                        : 'Something went wrong!'
+                };
+                response.status(status).json(errorResponse);
+            }
         }
     }
 
