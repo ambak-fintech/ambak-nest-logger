@@ -1,8 +1,18 @@
 // src/utils/formatters.ts
 
 import { FormatterOptions, LoggerConfig } from '../interfaces/logger-config.interface';
-import { SEVERITY_LEVEL } from '../config/constants';
+import { SEVERITY_LEVEL, LOGGER_CONSTANTS } from '../config/constants';
 
+const getEffectiveLoggerName = (logSource?: string): string => {
+    switch (logSource) {
+        case 'exception':
+            return LOGGER_CONSTANTS.ERROR_LOGGER_NAME;
+        case 'console':
+            return LOGGER_CONSTANTS.CONSOLE_LOGGER_NAME;
+        default:
+            return LOGGER_CONSTANTS.API_LOGGER_NAME;
+    }
+};
 export interface CloudLogEntry {
     severity: string;
     'logging.googleapis.com/trace'?: string;
@@ -57,14 +67,14 @@ export const formatters = {
         return {
             pid: bindings.pid,
             hostname: bindings.hostname,
-            'logging.googleapis.com/logName': getCloudLogName(
-                bindings.projectId,
-                bindings.loggerName
-            ),
-            resource: {
-                type: 'global',
-                labels: getResourceLabels(bindings.projectId, bindings.loggerName),
-            },
+            // 'logging.googleapis.com/logName': getCloudLogName(
+            //     bindings.projectId,
+            //     bindings.loggerName
+            // ),
+            // resource: {
+            //     type: 'global',
+            //     labels: getResourceLabels(bindings.projectId, bindings.loggerName),
+            // },
         };
     },
 
@@ -92,7 +102,7 @@ export const formatJsonLog = (
     } = options;
 
     const effectiveProjectId = log.PROJECT_ID || log.projectId || configProjectId;
-    const effectiveLoggerName = log.logName || log.service;
+    const effectiveLoggerName = getEffectiveLoggerName(log.logSource);
     const formatted: CloudLogEntry = {
         severity: SEVERITY_LEVEL[log.level || 'info'] || 'DEFAULT',
     };
@@ -108,11 +118,24 @@ export const formatJsonLog = (
     }
     
     if (includeResource) {
+        const loggerName = getEffectiveLoggerName(log.logSource);
+        
+        // Override the log name
+        formatted['logging.googleapis.com/logName'] = getCloudLogName(
+            effectiveProjectId,
+            loggerName
+        );
+        
         formatted['logging.googleapis.com/labels'] = {
             requestId: log.requestId,
             service: log.service,
-            logName: getCloudLogName(effectiveProjectId, effectiveLoggerName),
+            logName: getCloudLogName(effectiveProjectId, loggerName),
         };
+        
+        // Also update resource labels
+        if (formatted.resource?.labels) {
+            formatted.resource.labels.logger_name = loggerName;
+        }
     }
     
     if (log.sourceLocation) {
