@@ -12,7 +12,7 @@ export const setGlobalLogType = (logType: 'aws' | 'gcp' | undefined) => {
 };
 
 const getLogType = (): 'aws' | 'gcp' => {
-  return globalLogType || process.env.LOG_TYPE as 'aws' | 'gcp' || (process.env.LOG_FORMAT === 'aws' ? 'aws' : 'gcp');
+  return globalLogType || (process.env.LOG_TYPE as 'aws' | 'gcp') || 'gcp';
 };
 
 const getEffectiveLoggerName = (logSource?: string): string => {
