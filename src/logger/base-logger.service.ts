@@ -5,7 +5,7 @@ import pino, { Logger as PinoLogger } from 'pino';
 import { AsyncLocalStorage } from 'async_hooks';
 import { LOGGER_CONSTANTS } from '../config/constants';
 import { LoggerConfig } from '../interfaces';
-import { formatters } from '../utils/formatters';
+import { formatters, setGlobalLogType } from '../utils/formatters';
 import { serializers } from '../utils/serializers';
 import { RequestContext } from '../context';
 
@@ -19,6 +19,10 @@ export class BaseLoggerService {
     @Inject(LOGGER_CONSTANTS.ASYNC_STORAGE_TOKEN)
     private readonly asyncStorage: AsyncLocalStorage<RequestContext>
   ) {
+    // Set global log type from config so formatters can access it
+    if (this.config.LOG_TYPE) {
+      setGlobalLogType(this.config.LOG_TYPE);
+    }
     this.logger = this.createLogger();
   }
 

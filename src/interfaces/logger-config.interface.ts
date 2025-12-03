@@ -5,6 +5,7 @@ import type { Level as LogLevel } from 'pino';
 export interface LoggerConfig {
     LOG_LEVEL?: LogLevel;
     LOG_FORMAT?: 'json' | 'pretty';
+    LOG_TYPE?: 'aws' | 'gcp';
     PROJECT_ID: string;
     SERVICE_NAME: string;
     LOGGER_NAME?: string;
@@ -15,6 +16,7 @@ export interface LoggerConfig {
 }
 
 export interface FormatterOptions extends Partial<LoggerConfig> {
+    LOG_TYPE?: 'aws' | 'gcp';
     includeResource?: boolean;
     includeTrace?: boolean;
 }

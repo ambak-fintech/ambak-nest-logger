@@ -2,6 +2,18 @@
 
 import { FormatterOptions, LoggerConfig } from '../interfaces/logger-config.interface';
 import { SEVERITY_LEVEL, LOGGER_CONSTANTS } from '../config/constants';
+import { formatAwsLog } from './aws-formatter';
+
+// Store LOG_TYPE from config to be accessed by formatters
+let globalLogType: 'aws' | 'gcp' | undefined;
+
+export const setGlobalLogType = (logType: 'aws' | 'gcp' | undefined) => {
+  globalLogType = logType;
+};
+
+const getLogType = (): 'aws' | 'gcp' => {
+  return globalLogType || process.env.LOG_TYPE as 'aws' | 'gcp' || (process.env.LOG_FORMAT === 'aws' ? 'aws' : 'gcp');
+};
 
 const getEffectiveLoggerName = (logSource?: string): string => {
     switch (logSource) {
@@ -79,6 +91,13 @@ export const formatters = {
     },
 
     log: (object: Record<string, any>) => {
+        const logType = getLogType();
+        const isAwsFormat = object._awsFormat === true || logType === 'aws';
+        
+        if (isAwsFormat) {
+            return formatAwsLog(object);
+        }
+        
         const {
             pid, hostname, level, time, msg, 
             severity, requestId, service, 
@@ -92,8 +111,25 @@ export const formatters = {
 export const formatJsonLog = (
     log: Record<string, any>, 
     options: FormatterOptions = {}
-): CloudLogEntry => {
+): CloudLogEntry | Record<string, any> => {
     if (!log) return log;
+    
+    const logType = options.LOG_TYPE || getLogType();
+    
+    if (logType === 'aws') {
+        const {
+            'logging.googleapis.com/trace': _trace,
+            'logging.googleapis.com/spanId': _spanId,
+            'logging.googleapis.com/logName': _logName,
+            'logging.googleapis.com/labels': _labels,
+            'logging.googleapis.com/sourceLocation': _sourceLocation,
+            'logging.googleapis.com/operation': _operation,
+            'logging.googleapis.com/httpRequest': _httpRequest,
+            resource: _resource,
+            ...rest
+        } = log;
+        return rest;
+    }
     
     const {
         PROJECT_ID: configProjectId,
