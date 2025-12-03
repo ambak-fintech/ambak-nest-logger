@@ -15,7 +15,7 @@ import { RequestContext } from '../context/request-context';
 import { LOGGER_CONSTANTS, shouldExcludePath, getLogLevel } from '../config/constants';
 import { LoggerConfig } from '../interfaces';
 import { serializers } from '../utils/serializers';
-import { formatJsonLog } from '../utils/formatters';
+import { formatJsonLog } from '../formatters';
 
 enum ContextType {
     HTTP = 'http',

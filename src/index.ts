@@ -8,5 +8,5 @@ export * from './filters';
 export * from './interceptors';
 export * from './config/constants';
 export * from './utils/sanitizers';
-export * from './utils/formatters';
+export * from './formatters';
 export * from './context';

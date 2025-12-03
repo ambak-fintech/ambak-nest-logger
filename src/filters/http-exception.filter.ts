@@ -15,7 +15,7 @@ import { LOGGER_CONSTANTS } from '../config/constants';
 import { LoggerConfig } from '../interfaces';
 import { RequestContext } from '../context';
 import { serializers } from '../utils/serializers';
-import { formatJsonLog } from '../utils/formatters';
+import { formatJsonLog } from '../formatters';
 import { AsyncLocalStorage } from 'async_hooks';
 
 enum ContextType {

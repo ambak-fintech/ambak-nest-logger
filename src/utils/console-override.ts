@@ -1,7 +1,7 @@
 // src/utils/console-override.ts
 
 import { BaseLoggerService } from '../logger/base-logger.service';
-import { formatJsonLog } from './formatters';
+import { formatJsonLog } from '../formatters';
 import { RequestContext } from '../context/request-context';
 import { AsyncLocalStorage } from 'async_hooks';
 

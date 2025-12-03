@@ -5,7 +5,7 @@ import pino, { Logger as PinoLogger } from 'pino';
 import { AsyncLocalStorage } from 'async_hooks';
 import { LOGGER_CONSTANTS } from '../config/constants';
 import { LoggerConfig } from '../interfaces';
-import { formatters, setGlobalLogType } from '../utils/formatters';
+import { formatters, setGlobalLogType } from '../formatters';
 import { serializers } from '../utils/serializers';
 import { RequestContext } from '../context';
 
@@ -43,18 +43,31 @@ export class BaseLoggerService {
       }
     };
 
-    return pino({
+    // For AWS, disable timestamp formatter to prevent 'time' field
+    // We'll add 'timestamp' manually in the formatter
+    const timestampFormatter = this.config.LOG_TYPE === 'aws' 
+      ? false // Disable timestamp for AWS
+      : pino.stdTimeFunctions.isoTime;
+
+    // For AWS, don't use base object to avoid empty keys
+    const pinoConfig: any = {
       level: this.config.LOG_LEVEL || 'info',
       messageKey: 'message',
-      timestamp: pino.stdTimeFunctions.isoTime,
+      timestamp: timestampFormatter,
       formatters,
       serializers,
-      transport,
-      base: {
+      transport
+    };
+    
+    // Only add base for GCP to avoid empty keys in AWS
+    if (this.config.LOG_TYPE !== 'aws') {
+      pinoConfig.base = {
         projectId: this.config.PROJECT_ID,
         loggerName: this.config.LOGGER_NAME || this.config.SERVICE_NAME
-      }
-    });
+      };
+    }
+
+    return pino(pinoConfig);
   }
 
   private getLogMetadata() {
