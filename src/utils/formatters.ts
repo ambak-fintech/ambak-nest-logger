@@ -103,31 +103,86 @@ export const formatJsonLog = (
     } = options;
 
     const logType = (log.LOG_TYPE || log.logType || configLogType) as 'gcp' | 'aws';
-
-    if (logType === 'aws') {
+    if (logType === "aws") {
         const awsLog: Record<string, any> = {
-            ...log,
-            severity: SEVERITY_LEVEL[log.level || 'info'] || log.severity || 'DEFAULT',
+            severity: SEVERITY_LEVEL[log.level || "info"] || log.severity || "INFO",
+            timestamp: log.timestamp || log.time || new Date().toISOString(),
+            service: log.service || "api",
         };
-
-        if (!includeTrace) {
-            delete awsLog.traceId;
-            delete awsLog.spanId;
+    
+        if (includeTrace && log.traceId) {
+            const time = log.timestamp || log.time || new Date().toISOString();
+            const epochHex = Math.floor(new Date(time).getTime() / 1000)
+                .toString(16)
+                .padStart(8, "0");
+    
+            const traceId24 = log.traceId
+                .replace(/[^0-9a-f]/gi, "")
+                .slice(0, 24)
+                .padStart(24, "0")
+                .toLowerCase();
+    
+            const spanId16 = (log.spanId || "")
+                .replace(/[^0-9a-f]/gi, "")
+                .slice(0, 16)
+                .padStart(16, "0")
+                .toLowerCase();
+    
+            const fullTraceId = `1-${epochHex}-${traceId24}`;
+    
+            awsLog.trace = {
+                trace_id: fullTraceId,
+                segment_id: spanId16 || "0000000000000000",
+                sampled: true,
+            };
+    
+            awsLog["x-amzn-trace-id"] =
+                `Root=${fullTraceId};Parent=${spanId16};Sampled=1`;
         }
-
-        delete awsLog.pid;
-        delete awsLog.hostname;
-        delete awsLog.PROJECT_ID;
-        delete awsLog.LOG_TYPE;
-        delete awsLog.logType;
-        delete awsLog['logging.googleapis.com/trace'];
-        delete awsLog['logging.googleapis.com/spanId'];
-        delete awsLog['logging.googleapis.com/logName'];
-        delete awsLog['logging.googleapis.com/labels'];
-        delete awsLog['logging.googleapis.com/sourceLocation'];
-        delete awsLog['logging.googleapis.com/operation'];
-        delete awsLog['logging.googleapis.com/httpRequest'];
-
+    
+        const httpReq = log.httpRequest;
+        const method = log.method || httpReq?.requestMethod;
+        const url = log.url || log.path || httpReq?.requestUrl;
+        const clientIp = log.remoteAddress || httpReq?.remoteIp;
+        const contentLength = log.headers?.["content-length"] || httpReq?.requestSize;
+        const userAgent = log.headers?.["user-agent"] || httpReq?.userAgent;
+    
+        awsLog.request = {};
+        if (method) awsLog.request.method = method;
+        if (url) awsLog.request.url = url;
+        if (clientIp) awsLog.request.clientIp = clientIp;
+        if (contentLength)
+            awsLog.request.contentLength = Number(contentLength) || contentLength;
+        if (userAgent) awsLog.request.userAgent = userAgent;
+    
+        if (log.request_payload) {
+            awsLog.body = log.request_payload;
+        } else if (httpReq?.requestBody) {
+            awsLog.body = httpReq.requestBody;
+        }
+    
+        awsLog.aws = {
+            cloudwatch: {
+                log_group: `/aws/service/${awsLog.service}`,
+                log_stream: log.instance || "instance-1",
+            },
+        };
+        const removeKeys = [
+            "pid", "hostname", "time", "msg", "level", "levelNumber",
+            "PROJECT_ID", "LOG_TYPE", "logType", "request_payload",
+            "method", "url", "path", "headers", "remoteAddress",
+            "type", "target_service", "httpRequest", "traceId", "spanId",
+            "logging.googleapis.com/trace",
+            "logging.googleapis.com/spanId",
+            "logging.googleapis.com/logName",
+            "logging.googleapis.com/labels",
+            "logging.googleapis.com/sourceLocation",
+            "logging.googleapis.com/operation",
+            "logging.googleapis.com/httpRequest"
+        ];
+    
+        removeKeys.forEach((k) => delete awsLog[k]);
+    
         return awsLog as CloudLogEntry;
     }
 
