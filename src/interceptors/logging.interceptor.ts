@@ -86,6 +86,17 @@ export class LoggingInterceptor implements NestInterceptor {
         }
 
         const requestContext = RequestContext.create(req, this.getLogType());
+        
+        // Add trace headers to request for forwarding to downstream services
+        if (requestContext.traceContext) {
+            const headers = requestContext.addTraceHeaders();
+            Object.entries(headers).forEach(([key, value]) => {
+                if (value && key !== 'x-request-id') { // Don't override existing x-request-id
+                    req.headers[key] = value;
+                }
+            });
+        }
+        
         this.logRequest(req, requestContext);
         this.setTraceHeaders(res, requestContext);
 
@@ -179,8 +190,8 @@ export class LoggingInterceptor implements NestInterceptor {
         const requestLog = formatJsonLog({
             ...baseLogData,
             type: 'request',
-            ...serializers.req(req),
             target_service: 'graphql',
+            ...serializers.req(req),
             httpRequest: this.createGraphQLRequestObject(gqlContext)
         });
 
@@ -287,8 +298,8 @@ export class LoggingInterceptor implements NestInterceptor {
         const requestLog = formatJsonLog({
             ...baseLogData,
             type: 'request',
-            ...serializedReq,
             target_service: req.path.split('/')[1] || 'unknown',
+            ...serializedReq,
             httpRequest: this.createHttpRequestObject(req)
         });
 

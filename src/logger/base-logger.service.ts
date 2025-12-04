@@ -39,10 +39,14 @@ export class BaseLoggerService {
       }
     };
 
+    // Check LOG_TYPE - for AWS, don't use Pino's timestamp (we add our own 'timestamp' field)
+    const logType = this.config.LOG_TYPE || 'gcp';
+    const timestamp = logType === 'aws' ? false : pino.stdTimeFunctions.isoTime;
+
     return pino({
       level: this.config.LOG_LEVEL || 'info',
       messageKey: 'message',
-      timestamp: pino.stdTimeFunctions.isoTime,
+      timestamp,
       formatters,
       serializers,
       transport,

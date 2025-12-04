@@ -2,6 +2,7 @@
 
 import { FormatterOptions, LoggerConfig } from '../interfaces/logger-config.interface';
 import { SEVERITY_LEVEL, LOGGER_CONSTANTS } from '../config/constants';
+import { formatAwsLog } from './aws-formatter';
 
 const getEffectiveLoggerName = (logSource?: string): string => {
     switch (logSource) {
@@ -64,6 +65,18 @@ export const formatters = {
     },
 
     bindings: (bindings: Record<string, any>) => {
+        // Check LOG_TYPE - if AWS, don't add GCP-specific fields
+        const logType = (process.env.LOG_TYPE || 'gcp') as 'gcp' | 'aws';
+        
+        if (logType === 'aws') {
+            // For AWS, only return basic fields
+            return {
+                pid: bindings.pid,
+                hostname: bindings.hostname,
+            };
+        }
+        
+        // For GCP, return GCP-specific fields (currently commented out, but structure is here)
         return {
             pid: bindings.pid,
             hostname: bindings.hostname,
@@ -79,6 +92,15 @@ export const formatters = {
     },
 
     log: (object: Record<string, any>) => {
+        // Check LOG_TYPE - if AWS, remove unwanted fields that Pino might have added
+        const logType = (object.LOG_TYPE || object.logType || process.env.LOG_TYPE || 'gcp') as 'gcp' | 'aws';
+        
+        if (logType === 'aws') {
+            const cleaned = { ...object };
+            delete cleaned.time;
+            return cleaned;
+        }
+        
         const {
             pid, hostname, level, time, msg, 
             severity, requestId, service, 
@@ -104,102 +126,7 @@ export const formatJsonLog = (
 
     const logType = (log.LOG_TYPE || log.logType || configLogType) as 'gcp' | 'aws';
     if (logType === "aws") {
-        const awsLog: Record<string, any> = {
-            ...log,
-            severity: SEVERITY_LEVEL[log.level || "info"] || log.severity || "INFO",
-            timestamp: log.timestamp || log.time || new Date().toISOString(),
-        };
-    
-        if (includeTrace && log.traceId) {
-            const time = log.timestamp || log.time || new Date().toISOString();
-            const epochHex = Math.floor(new Date(time).getTime() / 1000)
-                .toString(16)
-                .padStart(8, "0");
-    
-            const traceId24 = log.traceId
-                .replace(/[^0-9a-f]/gi, "")
-                .slice(0, 24)
-                .padStart(24, "0")
-                .toLowerCase();
-    
-            const spanId16 = (log.spanId || "")
-                .replace(/[^0-9a-f]/gi, "")
-                .slice(0, 16)
-                .padStart(16, "0")
-                .toLowerCase();
-    
-            const fullTraceId = `1-${epochHex}-${traceId24}`;
-            
-            awsLog.traceId = fullTraceId;
-            awsLog.spanId = spanId16 || "0000000000000000";
-            awsLog.sampled = true;
-            awsLog["x-amzn-trace-id"] =
-                `Root=${fullTraceId};Parent=${spanId16};Sampled=1`;
-        }
-    
-        const httpReq = log.httpRequest;
-        if (httpReq) {
-            if (httpReq.graphql && !awsLog.graphql) {
-                awsLog.graphql = httpReq.graphql;
-            }
-            
-            if (!awsLog.method && httpReq.requestMethod) {
-                awsLog.method = httpReq.requestMethod;
-            }
-            if (!awsLog.url && httpReq.requestUrl) {
-                awsLog.url = httpReq.requestUrl;
-            }
-            if (!awsLog.path) {
-                if (log.path) {
-                    awsLog.path = log.path;
-                } else if (log.url) {
-                    awsLog.path = log.url;
-                } else if (httpReq.requestUrl) {
-                    try {
-                        const urlObj = new URL(httpReq.requestUrl);
-                        awsLog.path = urlObj.pathname;
-                    } catch {
-                        awsLog.path = httpReq.requestUrl;
-                    }
-                }
-            }
-            if (!awsLog.remoteAddress && httpReq.remoteIp) {
-                awsLog.remoteAddress = httpReq.remoteIp;
-            }
-            if (!awsLog.headers && httpReq.headers) {
-                awsLog.headers = httpReq.headers;
-            }
-            if (!awsLog.request_payload && httpReq.requestBody) {
-                awsLog.request_payload = httpReq.requestBody;
-            }
-        }
-    
-        awsLog.aws = {
-            cloudwatch: {
-                log_group: `/aws/service/${log.service || "api"}`,
-                log_stream: log.instance || "instance-1",
-                region: log.region || process.env.AWS_REGION || "ap-south-1",
-                account_id: log.account_id || process.env.AWS_ACCOUNT_ID || "123456789012",
-            },
-        };
-    
-        const removeKeys = [
-            "pid", "hostname", "time", "levelNumber",
-            "PROJECT_ID", "LOG_TYPE", "logType",
-            "target_service", "traceId", "spanId",
-            "msg", "httpRequest",
-            "logging.googleapis.com/trace",
-            "logging.googleapis.com/spanId",
-            "logging.googleapis.com/logName",
-            "logging.googleapis.com/labels",
-            "logging.googleapis.com/sourceLocation",
-            "logging.googleapis.com/operation",
-            "logging.googleapis.com/httpRequest"
-        ];
-    
-        removeKeys.forEach((k) => delete awsLog[k]);
-    
-        return awsLog as CloudLogEntry;
+        return formatAwsLog(log) as CloudLogEntry;
     }
 
     const effectiveProjectId = log.PROJECT_ID || log.projectId || configProjectId;
