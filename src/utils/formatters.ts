@@ -129,9 +129,9 @@ export const formatJsonLog = (
                 .toLowerCase();
     
             const fullTraceId = `1-${epochHex}-${traceId24}`;
-    
-            awsLog.trace_id = fullTraceId;
-            awsLog.segment_id = spanId16 || "0000000000000000";
+            
+            awsLog.traceId = fullTraceId;
+            awsLog.spanId = spanId16 || "0000000000000000";
             awsLog.sampled = true;
             awsLog["x-amzn-trace-id"] =
                 `Root=${fullTraceId};Parent=${spanId16};Sampled=1`;
