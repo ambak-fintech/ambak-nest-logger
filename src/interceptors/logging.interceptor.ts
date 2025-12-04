@@ -58,6 +58,11 @@ export class LoggingInterceptor implements NestInterceptor {
         private readonly logger: BaseLoggerService
     ) {}
 
+    private getLogType(): 'gcp' | 'aws' {
+        const configured = (this.config.LOG_TYPE || process.env.LOG_TYPE || 'gcp').toLowerCase();
+        return configured === 'aws' ? 'aws' : 'gcp';
+    }
+
     intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
         const metrics = new RequestMetrics(process.hrtime());
         const contextType = context.getType<string>();
@@ -80,7 +85,7 @@ export class LoggingInterceptor implements NestInterceptor {
             return next.handle();
         }
 
-        const requestContext = RequestContext.create(req);
+        const requestContext = RequestContext.create(req, this.getLogType());
         this.logRequest(req, requestContext);
         this.setTraceHeaders(res, requestContext);
 
@@ -111,8 +116,8 @@ export class LoggingInterceptor implements NestInterceptor {
         if (!req || shouldExcludePath(req.path)) {
             return next.handle();
         }
-    
-        const requestContext = RequestContext.create(req);
+
+        const requestContext = RequestContext.create(req, this.getLogType());
         this.logGraphQLRequest(gqlContext, requestContext);
     
         return this.asyncStorage.run(requestContext, () => 
@@ -135,7 +140,8 @@ export class LoggingInterceptor implements NestInterceptor {
             traceId: context.traceId,
             spanId: context.spanId,
             service: this.config.SERVICE_NAME,
-            PROJECT_ID: this.config.PROJECT_ID
+            PROJECT_ID: this.config.PROJECT_ID,
+            LOG_TYPE: this.getLogType()
         };
     }
 

@@ -73,6 +73,49 @@ export class TraceContext {
         }
     }
 
+    static parseXAmznTraceId(header?: string): TraceContext {
+        const context = new TraceContext();
+
+        if (!header) {
+            return TraceContext.generateNew();
+        }
+
+        try {
+            const parts = header.split(';').reduce((acc, part) => {
+                const [key, value] = part.split('=');
+                if (key && value) {
+                    acc[key.trim().toLowerCase()] = value.trim();
+                }
+                return acc;
+            }, {} as Record<string, string>);
+
+            const root = parts['root'];
+            if (!root) {
+                return TraceContext.generateNew();
+            }
+
+            const rootParts = root.split('-');
+            if (rootParts.length !== 3) {
+                return TraceContext.generateNew();
+            }
+
+            const [, timestamp, identifier] = rootParts;
+            const traceId = `${timestamp}${identifier}`;
+
+            if (!/^[0-9a-f]{32}$/i.test(traceId)) {
+                return TraceContext.generateNew();
+            }
+
+            context.traceId = traceId.toLowerCase();
+            context.spanId = randomBytes(8).toString('hex');
+            context.traceFlags = parts['sampled'] === '0' ? '00' : '01';
+
+            return context;
+        } catch {
+            return TraceContext.generateNew();
+        }
+    }
+
     parseTraceState(header?: string): void {
         if (!header) return;
 
@@ -102,6 +145,12 @@ export class TraceContext {
     toCloudTrace(): string {
         const isTraced = this.traceFlags === '01';
         return `${this.traceId}/${this.spanId};o=${isTraced ? '1' : '0'}`;
+    }
+
+    toXAmznTraceId(): string {
+        const rootTraceId = `1-${this.traceId.slice(0, 8)}-${this.traceId.slice(8)}`;
+        const sampled = this.traceFlags === '01' ? '1' : '0';
+        return `Root=${rootTraceId};Parent=${this.spanId};Sampled=${sampled}`;
     }
 
     createChildSpan(): TraceContext {

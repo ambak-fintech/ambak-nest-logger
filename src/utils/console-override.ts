@@ -17,6 +17,7 @@ interface ConsoleOverrideConfig {
     preserveOriginal?: boolean;
     projectId?: string;
     service?: string;
+    logType?: 'gcp' | 'aws';
 }
 
 const originalConsole: OriginalConsole = {
@@ -106,6 +107,7 @@ const formatArgs = (
     }).join(' ');
 
     const context = asyncLocalStorage.getStore();
+    const logType = (config.logType || process.env.LOG_TYPE || 'gcp').toLowerCase();
 
     const logData = {
         message,
@@ -116,7 +118,8 @@ const formatArgs = (
         timestamp: new Date().toISOString(),
         log_override: true,
         projectId: config.projectId,
-        service: config.service
+        service: config.service,
+        LOG_TYPE: logType === 'aws' ? 'aws' : 'gcp'
     };
 
     return formatJsonLog(logData);

@@ -90,68 +90,98 @@ export const formatters = {
 };
 
 export const formatJsonLog = (
-    log: Record<string, any>, 
+    log: Record<string, any>,
     options: FormatterOptions = {}
 ): CloudLogEntry => {
     if (!log) return log;
-    
+
     const {
         PROJECT_ID: configProjectId,
         includeResource = true,
         includeTrace = true,
+        LOG_TYPE: configLogType = 'gcp',
     } = options;
+
+    const logType = (log.LOG_TYPE || log.logType || configLogType) as 'gcp' | 'aws';
+
+    if (logType === 'aws') {
+        const awsLog: Record<string, any> = {
+            ...log,
+            severity: SEVERITY_LEVEL[log.level || 'info'] || log.severity || 'DEFAULT',
+        };
+
+        if (!includeTrace) {
+            delete awsLog.traceId;
+            delete awsLog.spanId;
+        }
+
+        delete awsLog.pid;
+        delete awsLog.hostname;
+        delete awsLog.PROJECT_ID;
+        delete awsLog.LOG_TYPE;
+        delete awsLog.logType;
+        delete awsLog['logging.googleapis.com/trace'];
+        delete awsLog['logging.googleapis.com/spanId'];
+        delete awsLog['logging.googleapis.com/logName'];
+        delete awsLog['logging.googleapis.com/labels'];
+        delete awsLog['logging.googleapis.com/sourceLocation'];
+        delete awsLog['logging.googleapis.com/operation'];
+        delete awsLog['logging.googleapis.com/httpRequest'];
+
+        return awsLog as CloudLogEntry;
+    }
 
     const effectiveProjectId = log.PROJECT_ID || log.projectId || configProjectId;
     const effectiveLoggerName = getEffectiveLoggerName(log.logSource);
     const formatted: CloudLogEntry = {
         severity: SEVERITY_LEVEL[log.level || 'info'] || 'DEFAULT',
     };
-    
+
     if (includeTrace && log.traceId) {
-        formatted['logging.googleapis.com/trace'] = effectiveProjectId 
+        formatted['logging.googleapis.com/trace'] = effectiveProjectId
             ? `projects/${effectiveProjectId}/traces/${log.traceId}`
             : log.traceId;
-        
+
         if (log.spanId) {
             formatted['logging.googleapis.com/spanId'] = log.spanId;
         }
     }
-    
+
     if (includeResource) {
         const loggerName = getEffectiveLoggerName(log.logSource);
-        
+
         // Override the log name
         formatted['logging.googleapis.com/logName'] = getCloudLogName(
             effectiveProjectId,
             loggerName
         );
-        
+
         formatted['logging.googleapis.com/labels'] = {
             requestId: log.requestId,
             service: log.service,
             logName: getCloudLogName(effectiveProjectId, loggerName),
         };
-        
+
         // Also update resource labels
         if (formatted.resource?.labels) {
             formatted.resource.labels.logger_name = loggerName;
         }
     }
-    
+
     if (log.sourceLocation) {
         formatted['logging.googleapis.com/sourceLocation'] = log.sourceLocation;
     }
-    
+
     if (log.operation) {
         formatted['logging.googleapis.com/operation'] = log.operation;
     }
-    
+
     if (log.httpRequest) {
         formatted['logging.googleapis.com/httpRequest'] = log.httpRequest;
     }
-    
+
     Object.assign(formatted, log);
-    
+
     delete formatted.pid;
     delete formatted.hostname;
     delete formatted.requestId;
@@ -160,6 +190,8 @@ export const formatJsonLog = (
     delete formatted.spanId;
     delete formatted.sourceLocation;
     delete formatted.operation;
-    
+    delete formatted.LOG_TYPE;
+    delete formatted.logType;
+
     return formatted;
 };
