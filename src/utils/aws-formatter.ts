@@ -195,23 +195,6 @@ export const formatAwsLog = (object: Record<string, any>): Record<string, any> =
         }
     });
     
-    const fieldsToRemove = [
-        'time',
-        'logging.googleapis.com/logName',
-        'logging.googleapis.com/trace',
-        'logging.googleapis.com/spanId',
-        'logging.googleapis.com/labels',
-        'logging.googleapis.com/sourceLocation',
-        'logging.googleapis.com/operation',
-        'logging.googleapis.com/httpRequest',
-        'resource',
-        'levelNumber',
-        'msg',
-        'httpRequest',
-        'LOG_TYPE',
-        'logType'
-    ];
-    
     Object.keys(result).forEach(key => {
         if (key.startsWith('logging.googleapis.com/')) {
             delete result[key];
