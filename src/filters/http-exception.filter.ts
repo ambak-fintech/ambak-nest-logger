@@ -53,6 +53,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
         private readonly asyncStorage: AsyncLocalStorage<RequestContext>
     ) {}
 
+    private getLogType(): 'gcp' | 'aws' {
+        const configured = (this.config.LOG_TYPE || process.env.LOG_TYPE || 'gcp').toLowerCase();
+        return configured === 'aws' ? 'aws' : 'gcp';
+    }
+
     catch(error: Error, host: ArgumentsHost): void {
         const contextType = host.getType() as ContextType;
         let request: Request;
@@ -87,7 +92,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
         const existingContext = this.asyncStorage.getStore();
         if (!existingContext) {
-            const newContext = RequestContext.create(request);
+            const newContext = RequestContext.create(request, this.getLogType());
             this.asyncStorage.run(newContext, () => {
                 this.handleError(error, request, response, newContext, contextType);
             });
@@ -250,6 +255,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
             spanId: context.spanId,
             service: this.config.SERVICE_NAME,
             projectId: this.config.PROJECT_ID,
+            LOG_TYPE: this.getLogType(),
             contextType,
             type: 'response',
             error: serializers.err(error),

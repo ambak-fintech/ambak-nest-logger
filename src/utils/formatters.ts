@@ -2,6 +2,7 @@
 
 import { FormatterOptions, LoggerConfig } from '../interfaces/logger-config.interface';
 import { SEVERITY_LEVEL, LOGGER_CONSTANTS } from '../config/constants';
+import { formatAwsLog } from './aws-formatter';
 
 const getEffectiveLoggerName = (logSource?: string): string => {
     switch (logSource) {
@@ -64,6 +65,18 @@ export const formatters = {
     },
 
     bindings: (bindings: Record<string, any>) => {
+        // Check LOG_TYPE - if AWS, don't add GCP-specific fields
+        const logType = (process.env.LOG_TYPE || 'gcp') as 'gcp' | 'aws';
+        
+        if (logType === 'aws') {
+            // For AWS, only return basic fields
+            return {
+                pid: bindings.pid,
+                hostname: bindings.hostname,
+            };
+        }
+        
+        // For GCP, return GCP-specific fields (currently commented out, but structure is here)
         return {
             pid: bindings.pid,
             hostname: bindings.hostname,
@@ -79,6 +92,15 @@ export const formatters = {
     },
 
     log: (object: Record<string, any>) => {
+        // Check LOG_TYPE - if AWS, remove unwanted fields that Pino might have added
+        const logType = (object.LOG_TYPE || object.logType || process.env.LOG_TYPE || 'gcp') as 'gcp' | 'aws';
+        
+        if (logType === 'aws') {
+            const cleaned = { ...object };
+            delete cleaned.time;
+            return cleaned;
+        }
+        
         const {
             pid, hostname, level, time, msg, 
             severity, requestId, service, 
@@ -90,68 +112,74 @@ export const formatters = {
 };
 
 export const formatJsonLog = (
-    log: Record<string, any>, 
+    log: Record<string, any>,
     options: FormatterOptions = {}
 ): CloudLogEntry => {
     if (!log) return log;
-    
+
     const {
         PROJECT_ID: configProjectId,
         includeResource = true,
         includeTrace = true,
+        LOG_TYPE: configLogType = 'gcp',
     } = options;
+
+    const logType = (log.LOG_TYPE || log.logType || configLogType) as 'gcp' | 'aws';
+    if (logType === "aws") {
+        return formatAwsLog(log) as CloudLogEntry;
+    }
 
     const effectiveProjectId = log.PROJECT_ID || log.projectId || configProjectId;
     const effectiveLoggerName = getEffectiveLoggerName(log.logSource);
     const formatted: CloudLogEntry = {
         severity: SEVERITY_LEVEL[log.level || 'info'] || 'DEFAULT',
     };
-    
+
     if (includeTrace && log.traceId) {
-        formatted['logging.googleapis.com/trace'] = effectiveProjectId 
+        formatted['logging.googleapis.com/trace'] = effectiveProjectId
             ? `projects/${effectiveProjectId}/traces/${log.traceId}`
             : log.traceId;
-        
+
         if (log.spanId) {
             formatted['logging.googleapis.com/spanId'] = log.spanId;
         }
     }
-    
+
     if (includeResource) {
         const loggerName = getEffectiveLoggerName(log.logSource);
-        
+
         // Override the log name
         formatted['logging.googleapis.com/logName'] = getCloudLogName(
             effectiveProjectId,
             loggerName
         );
-        
+
         formatted['logging.googleapis.com/labels'] = {
             requestId: log.requestId,
             service: log.service,
             logName: getCloudLogName(effectiveProjectId, loggerName),
         };
-        
+
         // Also update resource labels
         if (formatted.resource?.labels) {
             formatted.resource.labels.logger_name = loggerName;
         }
     }
-    
+
     if (log.sourceLocation) {
         formatted['logging.googleapis.com/sourceLocation'] = log.sourceLocation;
     }
-    
+
     if (log.operation) {
         formatted['logging.googleapis.com/operation'] = log.operation;
     }
-    
+
     if (log.httpRequest) {
         formatted['logging.googleapis.com/httpRequest'] = log.httpRequest;
     }
-    
+
     Object.assign(formatted, log);
-    
+
     delete formatted.pid;
     delete formatted.hostname;
     delete formatted.requestId;
@@ -160,6 +188,8 @@ export const formatJsonLog = (
     delete formatted.spanId;
     delete formatted.sourceLocation;
     delete formatted.operation;
-    
+    delete formatted.LOG_TYPE;
+    delete formatted.logType;
+
     return formatted;
 };
