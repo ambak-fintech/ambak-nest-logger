@@ -131,7 +131,7 @@
                 },
                 _traceContext: {
                     value: this._traceContext?.createChildSpan() ||
-                        TraceContext.generateNew(),
+                        TraceContext.generateNew(this._logType === 'aws'),
                     writable: false
                 },
                 _logType: {
