@@ -96,8 +96,7 @@ export const formatters = {
         const logType = (object.LOG_TYPE || object.logType || process.env.LOG_TYPE || 'gcp') as 'gcp' | 'aws';
         
         if (logType === 'aws') {
-            const cleaned = { ...object };
-            delete cleaned.time;
+            const { severity, time, ...cleaned } = object;
             return cleaned;
         }
         
