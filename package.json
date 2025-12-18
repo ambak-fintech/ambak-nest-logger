@@ -1,6 +1,6 @@
 {
     "name": "@ambak/nest-logger",
-    "version": "1.0.10",
+    "version": "1.0.11",
     "description": "Structured logging for NestJS applications",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
