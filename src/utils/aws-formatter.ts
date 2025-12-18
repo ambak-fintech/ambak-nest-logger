@@ -64,7 +64,7 @@ export const formatAwsLog = (object: Record<string, any>): Record<string, any> =
 
     const {
         pid, hostname, level, levelNumber, time, timestamp,
-        msg, severity, requestId, service,
+        msg, message, severity, requestId, service,
         traceId, spanId,
         method, url, path, params, remoteAddress, headers, request_payload,
         httpRequest, response,
@@ -101,6 +101,16 @@ export const formatAwsLog = (object: Record<string, any>): Record<string, any> =
     if (type) {
         result.type = type;
     }
+    else{
+        result.type = 'console_log';
+    }
+    const effectiveMessage =
+        (typeof msg === 'string' && msg.length > 0)
+            ? msg
+            : (typeof message === 'string' && message.length > 0 ? message : null);
+    if (effectiveMessage) {
+        result.message = effectiveMessage;
+    }
     
     if (service) {
         result.service = service;
@@ -127,6 +137,7 @@ export const formatAwsLog = (object: Record<string, any>): Record<string, any> =
         const awsTraceId = convertToAwsXRayTraceId(traceId, result.timestamp);
         result.traceId = awsTraceId; // Replace traceId with AWS format
         result['x-amzn-trace-id'] = generateXAmznTraceId(awsTraceId, spanId);
+        result['x-cloud-trace-context'] = generateXAmznTraceId(awsTraceId, spanId);
         result.sampled = true;
     }
     
@@ -168,17 +179,10 @@ export const formatAwsLog = (object: Record<string, any>): Record<string, any> =
         result.graphql = httpRequest.graphql;
     }
     
-    const serviceName = service;
-    result.aws = {
-        cloudwatch: {
-            log_group: `/aws/service/${serviceName}`,
-            log_stream: instance || 'instance-1',
-            region: region || process.env.AWS_REGION,
-            account_id: account_id || process.env.AWS_ACCOUNT_ID
-        }
-    };
+    // Note: CloudWatch log group/stream are handled by AWS infra. We intentionally do not add
+    // an `aws.cloudwatch` block to keep logs small and consistent with the Express logger.
     
-    const allowedExtraFields = ['response', 'graphql'];
+    const allowedExtraFields = ['response', 'graphql', 'message', 'logLevel'];
     
     Object.keys(rest).forEach(key => {
         if (!key.startsWith('logging.googleapis.com/') &&
@@ -186,6 +190,7 @@ export const formatAwsLog = (object: Record<string, any>): Record<string, any> =
             key !== 'levelNumber' &&
             key !== 'time' &&
             key !== 'msg' &&
+            key !== 'message' &&
             key !== 'httpRequest' &&
             key !== 'LOG_TYPE' &&
             key !== 'logType' &&

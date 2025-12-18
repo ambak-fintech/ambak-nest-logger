@@ -98,8 +98,6 @@ export const formatters = {
         if (logType === 'aws') {
             // Remove fields that formatAwsLog will add to avoid duplicates
             const { 
-                severity, time, 
-                service, requestId, traceId, spanId,
                 ...cleaned 
             } = object;
             return cleaned;

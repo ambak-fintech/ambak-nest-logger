@@ -52,7 +52,12 @@
             let traceContext: TraceContext | null = null;
 
             if (logType === 'aws') {
-                if (req.headers['x-amzn-trace-id']) {
+                // Prefer x-cloud-trace-context first in AWS mode (some gateways forward AWS trace ids under this key)
+                if (req.headers['x-cloud-trace-context']) {
+                    traceContext = TraceContext.parseXAmznTraceId(
+                        req.headers['x-cloud-trace-context'] as string
+                    );
+                } else if (req.headers['x-amzn-trace-id']) {
                     traceContext = TraceContext.parseXAmznTraceId(
                         req.headers['x-amzn-trace-id'] as string
                     );
