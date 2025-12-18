@@ -104,7 +104,9 @@
         addTraceHeaders(headers: Record<string, string> = {}): Record<string, string> {
             if (this._traceContext) {
                 if (this._logType === 'aws') {
-                    headers['x-amzn-trace-id'] = this._traceContext.toXAmznTraceId();
+                    const XAmznTraceId = this._traceContext.toXAmznTraceId();
+                    headers['x-amzn-trace-id'] = XAmznTraceId;
+                    headers['x-cloud-trace-context'] = XAmznTraceId;
                 } else {
                     headers.traceparent = this._traceContext.toTraceParent();
 
