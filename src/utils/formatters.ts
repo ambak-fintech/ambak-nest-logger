@@ -58,6 +58,14 @@ export const getResourceLabels = (
 
 export const formatters = {
     level: (label: string, number: number) => {
+        const logType = (process.env.LOG_TYPE || 'gcp') as 'gcp' | 'aws';
+        
+        if (logType === 'aws') {
+            return {
+                level: number
+            };
+        }
+        
         return {
             severity: SEVERITY_LEVEL[label] || 'DEFAULT',
             level: number
