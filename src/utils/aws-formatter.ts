@@ -84,13 +84,20 @@ export const formatAwsLog = (object: Record<string, any>): Record<string, any> =
 
     const result: Record<string, any> = {};
     
-    if (severity) {
-        result.severity = severity;
-    } else if (level !== undefined) {
+    // Set severity based on available info:
+    // - If level is provided, map it to severity (level is authoritative)
+    // - If severity is explicitly provided, use it
+    // - Otherwise, DON'T set a default here - let pino's level formatter handle it
+    //   This prevents the "double severity" issue when formatAwsLog is called
+    //   before the log level is determined
+    if (level !== undefined) {
         result.severity = levelToSeverity[level] || SEVERITY_LEVEL['info'] || 'INFO';
-    } else {
-        result.severity = 'INFO';
+    } else if (severity) {
+        result.severity = severity;
     }
+    // Note: We intentionally don't set a default severity here.
+    // The pino level formatter (in formatters.ts) will set the correct severity
+    // based on the actual log level (info/warn/error/etc.)
     
     if (level !== undefined) {
         result.level = level;

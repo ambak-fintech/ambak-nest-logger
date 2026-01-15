@@ -1,7 +1,6 @@
 // src/utils/console-override.ts
 
 import { BaseLoggerService } from '../logger/base-logger.service';
-import { formatJsonLog } from './formatters';
 import { RequestContext } from '../context/request-context';
 import { AsyncLocalStorage } from 'async_hooks';
 
@@ -109,7 +108,10 @@ const formatArgs = (
     const context = asyncLocalStorage.getStore();
     const logType = (config.logType || process.env.LOG_TYPE || 'gcp').toLowerCase();
 
-    const logData = {
+    // Return raw log data - DO NOT call formatJsonLog here because
+    // the log level is not yet known. AWS/GCP formatting should happen
+    // in pino's formatters.log where level is available.
+    return {
         message,
         logSource: 'console',
         requestId: context?.requestId,
@@ -119,10 +121,9 @@ const formatArgs = (
         log_override: true,
         projectId: config.projectId,
         service: config.service,
-        LOG_TYPE: logType === 'aws' ? 'aws' : 'gcp'
+        LOG_TYPE: logType === 'aws' ? 'aws' : 'gcp',
+        type: 'console_log'
     };
-
-    return formatJsonLog(logData);
 };
 
 const createConsoleHandlers = (
