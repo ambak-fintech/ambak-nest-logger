@@ -14,6 +14,11 @@ import { ConsoleOverrideService } from './services/console-override.service';
 @Module({})
 export class LoggerModule {
   static forRoot(config: LoggerConfig): DynamicModule {
+    const logRegister = Number(config.LOG_REGISTER ?? process.env.LOG_REGISTER ?? 5);
+    const isBasicMode = !Number.isNaN(logRegister) && logRegister === 1;
+    const isSilentMode = !Number.isNaN(logRegister) && logRegister === 0;
+    const shouldAttachNestLogging = !(isBasicMode || isSilentMode);
+
     const providers: Provider[] = [
       {
         provide: LOGGER_CONSTANTS.MODULE_OPTIONS_TOKEN,
@@ -28,15 +33,19 @@ export class LoggerModule {
         useClass: BaseLoggerService
       },
       BaseLoggerService, // Explicitly add BaseLoggerService
-      ConsoleOverrideService,
-      {
-        provide: APP_INTERCEPTOR,
-        useClass: LoggingInterceptor
-      },
-      {
-        provide: APP_FILTER,
-        useClass: HttpExceptionFilter
-      }
+      ...(shouldAttachNestLogging
+        ? [
+            ConsoleOverrideService,
+            {
+              provide: APP_INTERCEPTOR,
+              useClass: LoggingInterceptor
+            },
+            {
+              provide: APP_FILTER,
+              useClass: HttpExceptionFilter
+            }
+          ]
+        : [])
     ];
 
     return {
