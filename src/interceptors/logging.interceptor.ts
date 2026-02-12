@@ -63,6 +63,13 @@ export class LoggingInterceptor implements NestInterceptor {
         return configured === 'aws' ? 'aws' : 'gcp';
     }
 
+    private getLogRegisterMode(): number {
+        const raw = this.config.LOG_REGISTER ?? process.env.LOG_REGISTER ?? '5';
+        const parsed = Number(raw);
+        if (Number.isNaN(parsed) || parsed < 0 || parsed > 5) return 5;
+        return parsed;
+    }
+
     intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
         const metrics = new RequestMetrics(process.hrtime());
         const contextType = context.getType<string>();
@@ -213,6 +220,11 @@ export class LoggingInterceptor implements NestInterceptor {
         const baseLogData = this.createBaseLogData(context);
         const req = gqlContext.getContext().req;
 
+        const httpRequest = this.createGraphQLRequestObject(gqlContext);
+        if (this.getLogRegisterMode() === 2) {
+            delete (httpRequest as any).requestBody;
+        }
+
         const responseLog = formatJsonLog({
             ...baseLogData,
             type: 'response',
@@ -222,7 +234,7 @@ export class LoggingInterceptor implements NestInterceptor {
                 body: data
             },
             httpRequest: {
-                ...this.createGraphQLRequestObject(gqlContext),
+                ...httpRequest,
                 status: 200,
                 responseSize: JSON.stringify(data).length,
                 latency: metrics.getLatencyObject(responseTime)
@@ -316,6 +328,11 @@ export class LoggingInterceptor implements NestInterceptor {
         const responseTime = metrics.getResponseTime();
         const baseLogData = this.createBaseLogData(context);
 
+        const httpRequest = this.createHttpRequestObject(req, res, responseTime);
+        if (this.getLogRegisterMode() === 2) {
+            delete (httpRequest as any).requestBody;
+        }
+
         const responseLog = formatJsonLog({
             ...baseLogData,
             type: 'response',
@@ -324,7 +341,7 @@ export class LoggingInterceptor implements NestInterceptor {
                 response_time_ms: responseTime,
                 body: data
             },
-            httpRequest: this.createHttpRequestObject(req, res, responseTime)
+            httpRequest
         });
 
         this.logger.info(responseLog);
@@ -341,6 +358,11 @@ export class LoggingInterceptor implements NestInterceptor {
         const baseLogData = this.createBaseLogData(context);
         const status = res.statusCode;
     
+        const httpRequest = this.createHttpRequestObject(req, res, responseTime);
+        if (this.getLogRegisterMode() === 2) {
+            delete (httpRequest as any).requestBody;
+        }
+
         const logData = {
             ...baseLogData,
             type: 'error',
@@ -349,7 +371,7 @@ export class LoggingInterceptor implements NestInterceptor {
                 statusCode: status,
                 response_time_ms: responseTime
             },
-            httpRequest: this.createHttpRequestObject(req, res, responseTime)
+            httpRequest
         };
     
         const formattedLog = formatJsonLog(logData);

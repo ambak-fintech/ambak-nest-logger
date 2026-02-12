@@ -9,9 +9,19 @@ import { formatters } from '../utils/formatters';
 import { serializers } from '../utils/serializers';
 import { RequestContext } from '../context';
 
+interface LoggerLike {
+  trace: (msg: any) => void;
+  debug: (msg: any) => void;
+  info: (msg: any) => void;
+  warn: (msg: any) => void;
+  error: (msg: any) => void;
+  fatal: (msg: any) => void;
+  child: (bindings: Record<string, any>) => LoggerLike;
+}
+
 @Injectable()
 export class BaseLoggerService {
-  private logger: PinoLogger;
+  private logger: PinoLogger | LoggerLike;
 
   constructor(
     @Inject(LOGGER_CONSTANTS.MODULE_OPTIONS_TOKEN)
@@ -22,7 +32,16 @@ export class BaseLoggerService {
     this.logger = this.createLogger();
   }
 
-  private createLogger(): PinoLogger {
+  private createLogger(): PinoLogger | LoggerLike {
+    const logRegister = this.resolveLogRegisterValue(
+      this.config.LOG_REGISTER ?? process.env.LOG_REGISTER ?? '5',
+    );
+
+    // LOG_REGISTER=1 -> raw/basic node logs (no JSON formatting)
+    if (logRegister === 1) {
+      return this.createRawLogger();
+    }
+
     const transport = {
       target: this.config.LOG_FORMAT === 'pretty' ? 'pino-pretty' : 'pino/file',
       options: this.config.LOG_FORMAT === 'pretty' ? {
@@ -42,9 +61,14 @@ export class BaseLoggerService {
     // Check LOG_TYPE - for AWS, don't use Pino's timestamp (we add our own 'timestamp' field)
     const logType = this.config.LOG_TYPE || 'gcp';
     const timestamp = logType === 'aws' ? false : pino.stdTimeFunctions.isoTime;
+    const configuredLevel = this.resolveLogLevel(this.config.LOG_LEVEL);
+    const effectiveLevel = this.resolveLogRegisterToLevel(
+      logRegister,
+      configuredLevel,
+    );
 
     return pino({
-      level: this.config.LOG_LEVEL || 'info',
+      level: effectiveLevel,
       messageKey: 'message',
       timestamp,
       formatters,
@@ -55,6 +79,65 @@ export class BaseLoggerService {
         loggerName: this.config.LOGGER_NAME || this.config.SERVICE_NAME
       }
     });
+  }
+
+  private createRawLogger(): LoggerLike {
+    const toRawMessage = (payload: any): string => {
+      if (typeof payload === 'string') return payload;
+      try {
+        return JSON.stringify(payload);
+      } catch (_e) {
+        return String(payload);
+      }
+    };
+
+    const rawLogger: LoggerLike = {
+      trace: (msg: any) => console.debug(toRawMessage(msg)),
+      debug: (msg: any) => console.debug(toRawMessage(msg)),
+      info: (msg: any) => console.log(toRawMessage(msg)),
+      warn: (msg: any) => console.warn(toRawMessage(msg)),
+      error: (msg: any) => console.error(toRawMessage(msg)),
+      fatal: (msg: any) => console.error(toRawMessage(msg)),
+      child: (_bindings: Record<string, any>) => rawLogger,
+    };
+
+    return rawLogger;
+  }
+
+  private resolveLogLevel(level: LoggerConfig['LOG_LEVEL']): string {
+    const normalized = level !== undefined && level !== null
+      ? String(level).trim().toLowerCase()
+      : '';
+
+    if (!normalized) {
+      return 'info';
+    }
+
+    return normalized;
+  }
+
+  private resolveLogRegisterValue(register: LoggerConfig['LOG_REGISTER']): number {
+    const normalized = register !== undefined && register !== null
+      ? String(register).trim().toLowerCase()
+      : '';
+
+    if (!normalized) {
+      return 5;
+    }
+
+    const numericLevel = Number(normalized);
+    if (!Number.isNaN(numericLevel) && numericLevel >= 0 && numericLevel <= 5) {
+      return numericLevel;
+    }
+
+    return 5;
+  }
+
+  // LOG_REGISTER behavior:
+  // 0 => silent, 1 => raw mode (handled in createLogger), 2..5 => structured logger with fallbackLevel.
+  private resolveLogRegisterToLevel(logRegister: number, fallbackLevel: string): string {
+    if (logRegister === 0) return 'silent';
+    return fallbackLevel;
   }
 
   private getLogMetadata() {

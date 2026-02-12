@@ -3,7 +3,8 @@
 import type { Level as LogLevel } from 'pino';
 
 export interface LoggerConfig {
-    LOG_LEVEL?: LogLevel;
+    LOG_LEVEL?: LogLevel | string | number;
+    LOG_REGISTER?: string | number;
     LOG_FORMAT?: 'json' | 'pretty';
     LOG_TYPE?: 'gcp' | 'aws';
     PROJECT_ID: string;
