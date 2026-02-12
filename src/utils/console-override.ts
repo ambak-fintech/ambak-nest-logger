@@ -4,6 +4,8 @@ import { BaseLoggerService } from '../logger/base-logger.service';
 import { formatJsonLog } from './formatters';
 import { RequestContext } from '../context/request-context';
 import { AsyncLocalStorage } from 'async_hooks';
+import { stringify } from 'safe-stable-stringify';  
+import { serializers } from './serializers';
 
 interface OriginalConsole {
     log: typeof console.log;
@@ -28,69 +30,24 @@ const originalConsole: OriginalConsole = {
     debug: console.debug
 };
 
-const safeStringify = (obj: any, seen = new WeakSet()): string => {
-    // Handle non-object types
-    if (obj === null || typeof obj !== 'object') {
-        return String(obj);
+const safeStringify = (obj: any) => {
+    if (obj === null || obj === undefined) return String(obj);
+    if (typeof obj !== 'object') return String(obj);
+    
+    // Route known complex objects through your existing serializers
+    if (obj instanceof Error) return stringify(serializers.err(obj));
+    
+    // Detect req/res objects (IncomingMessage, ServerResponse)
+    if (obj.method && obj.headers && (obj.url || obj.originalUrl)) {
+        return stringify(serializers.req(obj));
     }
-
-    // Handle Date objects
-    if (obj instanceof Date) {
-        return obj.toISOString();
+    if (obj.statusCode !== undefined && typeof obj.getHeaders === 'function') {
+        return stringify(serializers.res(obj));
     }
-
-    // Handle Error objects
-    if (obj instanceof Error) {
-        const { name, message, stack, ...rest } = obj;
-        return JSON.stringify({
-            error: {
-                name,
-                message,
-                stack,
-                ...rest
-            }
-        });
-    }
-
-    // Check for circular references
-    if (seen.has(obj)) {
-        return '[Circular Reference]';
-    }
-
-    // Add object to WeakSet of seen objects
-    seen.add(obj);
-
-    // Handle arrays
-    if (Array.isArray(obj)) {
-        const arr = obj.map(item => {
-            try {
-                return safeStringify(item, seen);
-            } catch (e) {
-                return '[Complex Value]';
-            }
-        });
-        return `[${arr.join(', ')}]`;
-    }
-
-    // Handle objects
-    try {
-        const entries = Object.entries(obj)
-            .filter(([_, value]) => value !== undefined) // Filter out undefined values
-            .map(([key, value]) => {
-                try {
-                    // Skip internal Node.js properties that often cause circular refs
-                    if (key === 'socket' || key === '_httpMessage' || key === 'connection') {
-                        return `"${key}": "[Socket]"`;
-                    }
-                    return `"${key}": ${safeStringify(value, seen)}`;
-                } catch (e) {
-                    return `"${key}": "[Complex Value]"`;
-                }
-            });
-        return `{${entries.join(', ')}}`;
-    } catch (e) {
-        return '[Complex Object]';
-    }
+    
+    // safe-stable-stringify handles circular refs, throwing getters,
+    // BigInt, etc. — all the cases your manual code misses
+    return stringify(obj);
 };
 
 const formatArgs = (
