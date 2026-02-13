@@ -200,9 +200,3 @@ export class BaseLoggerService {
     return childLogger;
   }
 }
-
-exports: [
-  BaseLoggerService,
-  LOGGER_CONSTANTS.LOGGER_TOKEN,
-  LOGGER_CONSTANTS.ASYNC_STORAGE_TOKEN
-]

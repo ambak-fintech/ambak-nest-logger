@@ -1,6 +1,8 @@
 // src/utils/sanitizers.ts
 
 import { CONTENT_LIMITS } from '../config/constants';
+import { DEFAULT_SENSITIVE_FIELDS } from '../config/constants';
+import { DEFAULT_SENSITIVE_HEADERS } from '../config/constants';
 
 export interface Patterns {
     BASE64_IMAGE: RegExp;
@@ -28,27 +30,17 @@ const memoizedChecks = new Map<string, string>();
  */
 export function sanitizeImageData(value: any): any {
     if (typeof value !== 'string') return value;
-    
-    // Check memoization cache
-    const cached = memoizedChecks.get(value);
-    if (cached) return cached;
-    
-    let result = value;
-    
+
     if (value.length > 100) {
         if (PATTERNS.BASE64_IMAGE.test(value) || PATTERNS.BASE64_GENERIC.test(value)) {
-            result = '[BASE64 REDACTED]';
-        } else if (PATTERNS.IMAGE_URL.test(value)) {
-            result = '[IMAGE URL REDACTED]';
+            return '[BASE64 REDACTED]';
+        }
+        if (PATTERNS.IMAGE_URL.test(value)) {
+            return '[IMAGE URL REDACTED]';
         }
     }
-    
-    // Cache the result (with size limit)
-    if (memoizedChecks.size < 1000) {
-        memoizedChecks.set(value, result);
-    }
-    
-    return result;
+
+    return value;
 }
 
 /**
@@ -114,7 +106,7 @@ export function tryParseJson(str: any): object | null {
  */
 export function sanitizeBody(
     obj: any, 
-    sensitiveFields: Set<string> = new Set(),
+    sensitiveFields: Set<string> = DEFAULT_SENSITIVE_FIELDS,
     depth: number = 0
 ): any {
     // If it's a string, try to parse it as JSON first
@@ -159,7 +151,7 @@ export function sanitizeBody(
  */
 export function sanitizeHeaders(
     headers: Record<string, any> = {}, 
-    sensitiveHeaders: string[] = []
+    sensitiveHeaders: string[] = DEFAULT_SENSITIVE_HEADERS
 ): Record<string, any> {
     if (!headers || typeof headers !== 'object') {
         return {};

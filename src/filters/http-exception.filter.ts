@@ -248,6 +248,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
         logLevel: 'error' | 'warn' | 'info',
         contextType: ContextType
     ): void {
+        const elapsedMs = parseFloat(context.getElapsedMs());
+    
         const logData = {
             requestId: context.requestId,
             traceId: context.traceId,
@@ -257,29 +259,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
             projectId: this.config.PROJECT_ID,
             LOG_TYPE: this.getLogType(),
             contextType,
-            type: 'response',
+            type: 'error',
             error: serializers.err(error),
-            response: errorResponse,
+            response: {
+                ...errorResponse,
+                response_time_ms: elapsedMs
+            },
             httpRequest: {
                 requestMethod: request.method,
                 requestUrl: request.originalUrl,
                 status,
-                userAgent: request.headers['user-agent'],
-                remoteIp: request.ip,
-                referer: request.headers.referer,
-                requestBody: request.body,
-                protocol: request.protocol,
-                requestSize: request.headers['content-length'],
                 latency: {
-                    seconds: parseInt(context.getElapsedMs()) / 1000,
-                    nanos: (parseInt(context.getElapsedMs()) % 1000) * 1e6
-                },
-                headers: request.headers
+                    seconds: Math.floor(elapsedMs / 1000),
+                    nanos: (elapsedMs % 1000) * 1e6
+                }
             }
         };
-
+    
         const formattedLog = formatJsonLog(logData);
-
+    
         switch(logLevel) {
             case 'warn':
                 this.logger.warn(formattedLog);

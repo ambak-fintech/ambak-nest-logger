@@ -1,5 +1,5 @@
     // src/context/request-context.ts
-    import { randomBytes } from 'crypto';
+    import { randomBytes, randomUUID } from 'crypto';
     import { TraceContext } from './trace-context';
     import { Request } from 'express';
 
@@ -17,18 +17,25 @@
             this._metadata = new Map();
             this._logType = 'gcp';
         }
-
+        
+        private static readonly MAX_REQUEST_ID_LENGTH = 128;
+        private static readonly VALID_REQUEST_ID = /^[a-zA-Z0-9._\-]+$/;
+        
         static create(req: Request, logType: 'gcp' | 'aws' = 'gcp'): RequestContext {
             const context = new RequestContext();
-            
-            // Generate request ID - always use short 8-character format for consistency
-            // If x-request-id header exists, use it only if it's already 8 chars, otherwise generate new one
+    
             const incomingRequestId = req.headers['x-request-id'];
             let requestId: string;
-            if (incomingRequestId && typeof incomingRequestId === 'string' && incomingRequestId.length === 8 && /^[0-9a-f]{8}$/i.test(incomingRequestId)) {
-                requestId = incomingRequestId.toLowerCase();
+            if (
+                incomingRequestId
+                && typeof incomingRequestId === 'string'
+                && incomingRequestId.length > 0
+                && incomingRequestId.length <= RequestContext.MAX_REQUEST_ID_LENGTH
+                && RequestContext.VALID_REQUEST_ID.test(incomingRequestId)
+            ) {
+                requestId = incomingRequestId;
             } else {
-                requestId = randomBytes(16).toString('hex').slice(0, 8);
+                requestId = randomUUID();  // import { randomUUID } from 'crypto'
             }
             
             Object.defineProperties(context, {

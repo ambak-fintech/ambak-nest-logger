@@ -177,25 +177,36 @@ export const serializers = {
      */
     err: (err: Error): SerializedError => {
         if (!err) return err;
-        
-        try {
-            return {
-                type: (err as any).type || err.name,
-                message: err.message,
-                code: (err as any).code,
-                stack: err.stack,
-                statusCode: (err as any).statusCode || (err as any).status,
-                ...(err as any).details && { details: (err as any).details },
-                ...(err as any).context && { 
-                    context: sanitizeBody((err as any).context) 
+    
+        const MAX_CAUSE_DEPTH = 5;
+    
+        const serializeOne = (e: Error, depth: number = 0): SerializedError | undefined => {
+            if (!e || depth > MAX_CAUSE_DEPTH) return undefined;
+            try {
+                const serialized: any = {
+                    type: (e as any).type || e.name,
+                    message: e.message,
+                    code: (e as any).code,
+                    stack: e.stack,
+                    statusCode: (e as any).statusCode || (e as any).status,
+                    ...((e as any).details && { details: (e as any).details }),
+                    ...((e as any).context && {
+                        context: sanitizeBody((e as any).context)
+                    }),
+                };
+                if ((e as any).cause) {
+                    serialized.cause = serializeOne((e as any).cause, depth + 1);
                 }
-            };
-        } catch (e) {
-            return {
-                type: 'SerializationError',
-                message: e instanceof Error ? e.message : 'Failed to serialize error',
-            };
-        }
+                return serialized;
+            } catch (ex) {
+                return {
+                    type: 'SerializationError',
+                    message: ex instanceof Error ? ex.message : 'Failed to serialize error',
+                };
+            }
+        };
+    
+        return serializeOne(err)!;
     }
 };
 

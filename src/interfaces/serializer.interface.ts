@@ -36,4 +36,5 @@ export interface SerializedError {
     statusCode?: number;
     details?: any;
     context?: any;
+    cause?: SerializedError;
 }

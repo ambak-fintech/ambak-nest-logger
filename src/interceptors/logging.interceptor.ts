@@ -29,7 +29,7 @@ try {
     const { GqlExecutionContext: GqlContext } = require('@nestjs/graphql');
     GqlExecutionContext = GqlContext;
 } catch {
-    console.error("GraphQL is not Installed");
+    // console.error("GraphQL is not Installed");
 }
 
 class RequestMetrics {
@@ -218,7 +218,6 @@ export class LoggingInterceptor implements NestInterceptor {
     ): void {
         const responseTime = metrics.getResponseTime();
         const baseLogData = this.createBaseLogData(context);
-        const req = gqlContext.getContext().req;
 
         const httpRequest = this.createGraphQLRequestObject(gqlContext);
         if (this.getLogRegisterMode() === 2) {
