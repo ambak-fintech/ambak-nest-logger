@@ -6,7 +6,8 @@ export const EXCLUDED_PATHS = [
   '/health',
   '/metrics',
   '/*/health',
-  '/*/metrics'
+  '/*/metrics',
+  '/ready'
 ];
 
 export const shouldExcludePath = (path: string, customExclusions: string[] = []): boolean => {
