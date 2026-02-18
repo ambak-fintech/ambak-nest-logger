@@ -5,9 +5,10 @@ import type { Level as LogLevel } from 'pino';
 export const EXCLUDED_PATHS = [
   '/health',
   '/metrics',
+  '/ready',
   '/*/health',
   '/*/metrics',
-  '/ready'
+  '/*/ready'
 ];
 
 export const shouldExcludePath = (path: string, customExclusions: string[] = []): boolean => {
