@@ -219,11 +219,6 @@ export class LoggingInterceptor implements NestInterceptor {
         const responseTime = metrics.getResponseTime();
         const baseLogData = this.createBaseLogData(context);
 
-        const httpRequest = this.createGraphQLRequestObject(gqlContext);
-        if (this.getLogRegisterMode() === 2) {
-            delete (httpRequest as any).requestBody;
-        }
-
         const responseLog = formatJsonLog({
             ...baseLogData,
             type: 'response',
@@ -231,12 +226,6 @@ export class LoggingInterceptor implements NestInterceptor {
                 statusCode: 200,
                 response_time_ms: responseTime,
                 body: data
-            },
-            httpRequest: {
-                ...httpRequest,
-                status: 200,
-                responseSize: JSON.stringify(data).length,
-                latency: metrics.getLatencyObject(responseTime)
             }
         });
 
@@ -259,11 +248,6 @@ export class LoggingInterceptor implements NestInterceptor {
             response: {
                 statusCode: 500,
                 response_time_ms: responseTime
-            },
-            httpRequest: {
-                ...this.createGraphQLRequestObject(gqlContext),
-                status: 500,
-                latency: metrics.getLatencyObject(responseTime)
             }
         });
 
@@ -327,11 +311,6 @@ export class LoggingInterceptor implements NestInterceptor {
         const responseTime = metrics.getResponseTime();
         const baseLogData = this.createBaseLogData(context);
 
-        const httpRequest = this.createHttpRequestObject(req, res, responseTime);
-        if (this.getLogRegisterMode() === 2) {
-            delete (httpRequest as any).requestBody;
-        }
-
         const responseLog = formatJsonLog({
             ...baseLogData,
             type: 'response',
@@ -339,8 +318,7 @@ export class LoggingInterceptor implements NestInterceptor {
                 statusCode: res.statusCode,
                 response_time_ms: responseTime,
                 body: data
-            },
-            httpRequest
+            }
         });
 
         this.logger.info(responseLog);
@@ -356,11 +334,6 @@ export class LoggingInterceptor implements NestInterceptor {
         const responseTime = metrics.getResponseTime();
         const baseLogData = this.createBaseLogData(context);
         const status = res.statusCode;
-    
-        const httpRequest = this.createHttpRequestObject(req, res, responseTime);
-        if (this.getLogRegisterMode() === 2) {
-            delete (httpRequest as any).requestBody;
-        }
 
         const logData = {
             ...baseLogData,
@@ -369,8 +342,7 @@ export class LoggingInterceptor implements NestInterceptor {
             response: {
                 statusCode: status,
                 response_time_ms: responseTime
-            },
-            httpRequest
+            }
         };
     
         const formattedLog = formatJsonLog(logData);
