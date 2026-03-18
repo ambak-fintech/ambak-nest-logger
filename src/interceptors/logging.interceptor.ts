@@ -219,6 +219,8 @@ export class LoggingInterceptor implements NestInterceptor {
         const responseTime = metrics.getResponseTime();
         const baseLogData = this.createBaseLogData(context);
 
+        const req = gqlContext.getContext().req;
+
         const responseLog = formatJsonLog({
             ...baseLogData,
             type: 'response',
@@ -226,6 +228,14 @@ export class LoggingInterceptor implements NestInterceptor {
                 statusCode: 200,
                 response_time_ms: responseTime,
                 body: data
+            },
+            httpRequest: {
+                requestMethod: 'POST',
+                requestUrl: req.originalUrl || req.url,
+                remoteIp: req.ip || req.socket?.remoteAddress,
+                status: 200,
+                responseSize: JSON.stringify(data).length,
+                latency: metrics.getLatencyObject(responseTime)
             }
         });
 
@@ -241,6 +251,8 @@ export class LoggingInterceptor implements NestInterceptor {
         const responseTime = metrics.getResponseTime();
         const baseLogData = this.createBaseLogData(context);
 
+        const req = gqlContext.getContext().req;
+
         const errorLog = formatJsonLog({
             ...baseLogData,
             type: 'error',
@@ -248,6 +260,13 @@ export class LoggingInterceptor implements NestInterceptor {
             response: {
                 statusCode: 500,
                 response_time_ms: responseTime
+            },
+            httpRequest: {
+                requestMethod: 'POST',
+                requestUrl: req.originalUrl || req.url,
+                remoteIp: req.ip || req.socket?.remoteAddress,
+                status: 500,
+                latency: metrics.getLatencyObject(responseTime)
             }
         });
 
@@ -318,6 +337,14 @@ export class LoggingInterceptor implements NestInterceptor {
                 statusCode: res.statusCode,
                 response_time_ms: responseTime,
                 body: data
+            },
+            httpRequest: {
+                requestMethod: req.method,
+                requestUrl: req.originalUrl || req.url,
+                remoteIp: req.ip || req.socket?.remoteAddress,
+                status: res.statusCode,
+                responseSize: res.getHeader('content-length'),
+                latency: metrics.getLatencyObject(responseTime)
             }
         });
 
@@ -342,6 +369,13 @@ export class LoggingInterceptor implements NestInterceptor {
             response: {
                 statusCode: status,
                 response_time_ms: responseTime
+            },
+            httpRequest: {
+                requestMethod: req.method,
+                requestUrl: req.originalUrl || req.url,
+                remoteIp: req.ip || req.socket?.remoteAddress,
+                status: status,
+                latency: metrics.getLatencyObject(responseTime)
             }
         };
     
