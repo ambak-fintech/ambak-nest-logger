@@ -1,0 +1,24 @@
+src/interceptors/logging.interceptor.ts
+  e44d50e50af2cbeb 222-223,231-238,254-255,263-269,340-347,372-378
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.15",
+  "base_commit_sha": "65a61ee1bcac5549312c06a7537ddc2e929dd60d",
+  "prompts": {
+    "e44d50e50af2cbeb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e08258ea-aece-4438-8e35-28f36a6c8a46",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Pankaj Jha <pankaj.jha@ambak.com>",
+      "messages": [],
+      "total_additions": 34,
+      "total_deletions": 0,
+      "accepted_lines": 34,
+      "overriden_lines": 0,
+      "messages_url": "https://usegitai.com/cas/7a379575ecaf3197d25aaf80de0af118ae93c7ceca4c5c3ae7dee2bcff09185e"
+    }
+  }
+}
