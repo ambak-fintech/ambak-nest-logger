@@ -163,6 +163,16 @@ export class LoggingInterceptor implements NestInterceptor {
         };
     }
 
+    private getGraphQLOperationMetadata(info: any) {
+        const operationType = info.operation?.operation || '';
+        const operationName = info.operation?.name?.value || '';
+        const fieldName = info.fieldName || '';
+        return {
+            operationType,
+            fieldName
+        };
+    }
+
     private createGraphQLRequestObject(gqlContext: any) {
         const info = gqlContext.getInfo();
         const context = gqlContext.getContext();
@@ -225,9 +235,7 @@ export class LoggingInterceptor implements NestInterceptor {
         const responseLog = formatJsonLog({
             ...baseLogData,
             type: 'response',
-            operation_type: info.operation?.operation || '',
-            operation_name: info.fieldName || '',
-            operation: `${info.operation?.operation || ''}:${info.fieldName || ''}`,
+            ...this.getGraphQLOperationMetadata(info),
             response: {
                 statusCode: 200,
                 response_time_ms: responseTime,
@@ -261,9 +269,7 @@ export class LoggingInterceptor implements NestInterceptor {
         const errorLog = formatJsonLog({
             ...baseLogData,
             type: 'error',
-            operation_type: info.operation?.operation || '',
-            operation_name: info.fieldName || '',
-            operation: `${info.operation?.operation || ''}:${info.fieldName || ''}`,
+            ...this.getGraphQLOperationMetadata(info),
             error: serializers.err(error),
             response: {
                 statusCode: 500,
