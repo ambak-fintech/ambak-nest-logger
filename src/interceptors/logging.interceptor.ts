@@ -220,10 +220,14 @@ export class LoggingInterceptor implements NestInterceptor {
         const baseLogData = this.createBaseLogData(context);
 
         const req = gqlContext.getContext().req;
+        const info = gqlContext.getInfo();
 
         const responseLog = formatJsonLog({
             ...baseLogData,
             type: 'response',
+            operation_type: info.operation?.operation || '',
+            operation_name: info.fieldName || '',
+            operation: `${info.operation?.operation || ''}:${info.fieldName || ''}`,
             response: {
                 statusCode: 200,
                 response_time_ms: responseTime,
@@ -252,10 +256,14 @@ export class LoggingInterceptor implements NestInterceptor {
         const baseLogData = this.createBaseLogData(context);
 
         const req = gqlContext.getContext().req;
+        const info = gqlContext.getInfo();
 
         const errorLog = formatJsonLog({
             ...baseLogData,
             type: 'error',
+            operation_type: info.operation?.operation || '',
+            operation_name: info.fieldName || '',
+            operation: `${info.operation?.operation || ''}:${info.fieldName || ''}`,
             error: serializers.err(error),
             response: {
                 statusCode: 500,
