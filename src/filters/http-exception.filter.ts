@@ -62,6 +62,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         const contextType = host.getType() as ContextType;
         let request: Request;
         let response: Response;
+        let gqlInfo: any;
 
         if (contextType === ContextType.HTTP) {
             const ctx = host.switchToHttp();
@@ -71,6 +72,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
             const gqlContext = GqlExecutionContext.create(host as ExecutionContext);
             const ctx = gqlContext.getContext();
             request = ctx.req;
+            gqlInfo = gqlContext.getInfo?.();
             response = {
                 status: (statusCode: number) => ({
                     json: (data: any) => {
@@ -94,12 +96,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
         if (!existingContext) {
             const newContext = RequestContext.create(request, this.getLogType());
             this.asyncStorage.run(newContext, () => {
-                this.handleError(error, request, response, newContext, contextType);
+                this.handleError(error, request, response, newContext, contextType, gqlInfo);
             });
             return;
         }
 
-        this.handleError(error, request, response, existingContext, contextType);
+        this.handleError(error, request, response, existingContext, contextType, gqlInfo);
     }
 
     private handleError(
@@ -107,7 +109,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
         request: Request,
         response: Response,
         context: RequestContext,
-        contextType: ContextType
+        contextType: ContextType,
+        gqlInfo?: any
     ): void {
         const status = this.getHttpStatus(error);
         let errorResponse = this.createErrorResponse(error, status, request, context);
@@ -122,7 +125,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         }
 
         const logLevel = this.getLogLevel(status);
-        this.logErrorResponse(error, request, errorResponse, context, status, logLevel, contextType);
+        this.logErrorResponse(error, request, errorResponse, context, status, logLevel, contextType, gqlInfo);
 
         if (contextType === ContextType.GRAPHQL) {
             throw this.formatGraphQLError(errorResponse);
@@ -246,7 +249,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
         context: RequestContext,
         status: number,
         logLevel: 'error' | 'warn' | 'info',
-        contextType: ContextType
+        contextType: ContextType,
+        gqlInfo?: any
     ): void {
         const elapsedMs = parseFloat(context.getElapsedMs());
     
@@ -260,6 +264,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
             LOG_TYPE: this.getLogType(),
             contextType,
             type: 'error',
+            ...(gqlInfo ? {
+                graphql: {
+                    operationType: gqlInfo.operation?.operation || '',
+                    operationName: gqlInfo.operation?.name?.value || '',
+                    fieldName: gqlInfo.fieldName || ''
+                }
+            } : {}),
             error: serializers.err(error),
             response: {
                 ...errorResponse,
