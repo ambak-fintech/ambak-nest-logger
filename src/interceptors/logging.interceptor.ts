@@ -267,8 +267,12 @@ export class LoggingInterceptor implements NestInterceptor {
         // Get actual status from error if available, same as the HTTP path
         // (handleHttpRequest's error handler) does — a hardcoded 500 here mislabels
         // expected client errors (e.g. a resolver's 400 BadRequestException) as
-        // server errors in logs/alerts.
-        const status = error instanceof HttpException ? error.getStatus() : 500;
+        // server errors in logs/alerts. Also fall back to a plain status/statusCode
+        // property (e.g. non-HttpException DB/third-party errors), same as
+        // serializers.err already does for the error's own serialized statusCode.
+        const status = error instanceof HttpException
+            ? error.getStatus()
+            : (error as any)?.status || (error as any)?.statusCode || 500;
 
         const errorLog = formatJsonLog({
             ...baseLogData,
@@ -290,16 +294,7 @@ export class LoggingInterceptor implements NestInterceptor {
         });
 
         const logLevel = getLogLevel(status);
-        switch (logLevel) {
-            case 'warn':
-                this.logger.warn(errorLog);
-                break;
-            case 'error':
-                this.logger.error(errorLog);
-                break;
-            default:
-                this.logger.info(errorLog);
-        }
+        this.logger[logLevel](errorLog);
     }
 
     private createHttpRequestObject(
