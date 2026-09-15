@@ -264,25 +264,37 @@ export class LoggingInterceptor implements NestInterceptor {
         const req = gqlContext.getContext().req;
         const info = gqlContext.getInfo();
 
+        // Get actual status from error if available, same as the HTTP path
+        // (handleHttpRequest's error handler) does — a hardcoded 500 here mislabels
+        // expected client errors (e.g. a resolver's 400 BadRequestException) as
+        // server errors in logs/alerts. Also fall back to a plain status/statusCode
+        // property (e.g. non-HttpException DB/third-party errors), same as
+        // serializers.err already does for the error's own serialized statusCode.
+        const status = error instanceof HttpException
+            ? error.getStatus()
+            : (error as any)?.status || (error as any)?.statusCode || 500;
+
         const errorLog = formatJsonLog({
             ...baseLogData,
             type: 'error',
             graphql: this.getGraphQLOperationMetadata(info),
             error: serializers.err(error),
             response: {
-                statusCode: 500,
+                statusCode: status,
+                message: error?.message,
                 response_time_ms: responseTime
             },
             httpRequest: {
                 requestMethod: 'POST',
                 requestUrl: req.originalUrl || req.url,
                 remoteIp: req.ip || req.socket?.remoteAddress,
-                status: 500,
+                status,
                 latency: metrics.getLatencyObject(responseTime)
             }
         });
 
-        this.logger.error(errorLog);
+        const logLevel = getLogLevel(status);
+        this.logger[logLevel](errorLog);
     }
 
     private createHttpRequestObject(
