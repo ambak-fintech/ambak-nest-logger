@@ -67,9 +67,11 @@ export const DEFAULT_SENSITIVE_HEADERS = [
   'authorization',
   'cookie',
   'x-api-key',
+  'apikey',
   'token',
   'password',
-  'gateway-services'
+  'gateway-services',
+  'gateway-user'
 ];
 
 export const CONTENT_LIMITS = {
