@@ -1,6 +1,6 @@
 // src/logger/base-logger.service.ts
 
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import pino, { Logger as PinoLogger } from 'pino';
 import { AsyncLocalStorage } from 'async_hooks';
 import { LOGGER_CONSTANTS } from '../config/constants';
@@ -27,9 +27,12 @@ export class BaseLoggerService {
     @Inject(LOGGER_CONSTANTS.MODULE_OPTIONS_TOKEN)
     private readonly config: LoggerConfig,
     @Inject(LOGGER_CONSTANTS.ASYNC_STORAGE_TOKEN)
-    private readonly asyncStorage: AsyncLocalStorage<RequestContext>
+    private readonly asyncStorage: AsyncLocalStorage<RequestContext>,
+    @Optional()
+    @Inject(LOGGER_CONSTANTS.PARENT_LOGGER_TOKEN)
+    parentLogger?: PinoLogger | LoggerLike
   ) {
-    this.logger = this.createLogger();
+    this.logger = parentLogger ?? this.createLogger();
   }
 
   private createLogger(): PinoLogger | LoggerLike {
@@ -195,9 +198,7 @@ export class BaseLoggerService {
   }
 
   child(bindings: Record<string, any>): BaseLoggerService {
-    // Never construct a child via `new`: the constructor spawns a pino transport (worker thread + process 'exit' listener) that would leak.
-    const childLogger: BaseLoggerService = Object.create(BaseLoggerService.prototype);
-    Object.assign(childLogger, { config: this.config, asyncStorage: this.asyncStorage, logger: this.logger.child(bindings) });
-    return childLogger;
+    // Must pass the pino child: without it the constructor spawns a new transport (worker thread + process 'exit' listener) that leaks.
+    return new BaseLoggerService(this.config, this.asyncStorage, this.logger.child(bindings));
   }
 }
