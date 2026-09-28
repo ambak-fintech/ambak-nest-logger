@@ -15,7 +15,8 @@ export function InjectLogger(metadata?: LoggerMetadata): PropertyDecorator {
         
         // Use the class name as default context
         const context = metadata?.context || target.constructor.name;
-        
+        const cacheKey = Symbol(`childLogger:${String(propertyKey)}`);
+
         // Create a getter that returns a child logger with context
         Object.defineProperty(target, loggerProperty, {
             get(): BaseLoggerService {
@@ -23,7 +24,7 @@ export function InjectLogger(metadata?: LoggerMetadata): PropertyDecorator {
                 if (!logger) {
                     throw new Error('Logger is not injected. Make sure LoggerModule is imported.');
                 }
-                return logger.child({ context, ...metadata?.labels });
+                return ((this as any)[cacheKey] ??= logger.child({ context, ...metadata?.labels }));
             },
             enumerable: true,
             configurable: true

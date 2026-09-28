@@ -195,8 +195,9 @@ export class BaseLoggerService {
   }
 
   child(bindings: Record<string, any>): BaseLoggerService {
-    const childLogger = new BaseLoggerService(this.config, this.asyncStorage);
-    childLogger.logger = this.logger.child(bindings);
+    // Never construct a child via `new`: the constructor spawns a pino transport (worker thread + process 'exit' listener) that would leak.
+    const childLogger: BaseLoggerService = Object.create(BaseLoggerService.prototype);
+    Object.assign(childLogger, { config: this.config, asyncStorage: this.asyncStorage, logger: this.logger.child(bindings) });
     return childLogger;
   }
 }
