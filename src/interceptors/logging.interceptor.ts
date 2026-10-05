@@ -267,12 +267,10 @@ export class LoggingInterceptor implements NestInterceptor {
         // Get actual status from error if available, same as the HTTP path
         // (handleHttpRequest's error handler) does — a hardcoded 500 here mislabels
         // expected client errors (e.g. a resolver's 400 BadRequestException) as
-        // server errors in logs/alerts. Also fall back to a plain status/statusCode
-        // property (e.g. non-HttpException DB/third-party errors), same as
-        // serializers.err already does for the error's own serialized statusCode.
-        const status = error instanceof HttpException
-            ? error.getStatus()
-            : (error as any)?.status || (error as any)?.statusCode || 500;
+        // server errors in logs/alerts. Non-HttpExceptions stay 500: their own
+        // status/statusCode (e.g. an AxiosError's) is the downstream service's,
+        // not ours, and would downgrade real failures to warn.
+        const status = error instanceof HttpException ? error.getStatus() : 500;
 
         const errorLog = formatJsonLog({
             ...baseLogData,
