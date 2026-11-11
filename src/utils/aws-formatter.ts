@@ -69,7 +69,7 @@ export const formatAwsLog = (object: Record<string, any>): Record<string, any> =
         method, url, path, params, remoteAddress, headers, request_payload,
         httpRequest, response,
         type, target_service, instance, region, account_id,
-        graphql,
+        graphql, error,
         ...rest
     } = object;
     
@@ -108,8 +108,15 @@ export const formatAwsLog = (object: Record<string, any>): Record<string, any> =
         (typeof msg === 'string' && msg.length > 0)
             ? msg
             : (typeof message === 'string' && message.length > 0 ? message : null);
-    if (effectiveMessage) {
-        result.message = effectiveMessage;
+    // A failed request is logged with the exception under `error` and no message of its own. Without
+    // this fallback the line reaches CloudWatch with no reason ("Unknown error" in alerts).
+    const errorMessage =
+        (typeof error?.message === 'string' && error.message.length > 0)
+            ? error.message
+            : (typeof error === 'string' && error.length > 0 ? error : null);
+    const finalMessage = effectiveMessage ?? errorMessage;
+    if (finalMessage) {
+        result.message = finalMessage;
     }
     
     if (service) {
@@ -177,6 +184,11 @@ export const formatAwsLog = (object: Record<string, any>): Record<string, any> =
         result.graphql = graphql;
     } else if (httpRequest?.graphql) {
         result.graphql = httpRequest.graphql;
+    }
+
+    // Keep the serialized exception (type, message, statusCode, stack, cause), as GCP mode already does.
+    if (error) {
+        result.error = error;
     }
     
     // Note: CloudWatch log group/stream are handled by AWS infra. We intentionally do not add
