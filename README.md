@@ -126,4 +126,5 @@ From `v1.1.0`, GraphQL response and error logs also include operation metadata c
 
 - Sensitive headers such as `authorization`, `cookie`, `x-api-key`, and `gateway-services` are redacted by default.
 - Large payloads, base64 blobs, image URLs, and common PII patterns are sanitized before logging.
+- From `v1.3.0`, `LOG_TYPE=aws` error logs keep the exception: `message` falls back to `error.message` and `error` (type, message, statusCode, stack, cause) stays on the line, as it already did for `gcp`. Earlier versions dropped it, so alerts showed "Unknown error".
 - The package publishes compiled files from `dist/` plus this README.
